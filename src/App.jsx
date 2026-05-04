@@ -156,29 +156,29 @@ const MODULES = [
 
 const DEVELOPMENT_ACTIVITIES = {
   Communication: {
-    onJob: ["Volunteer to lead the next team briefing or operational update meeting and ask a colleague to give you feedback on clarity and audience awareness afterwards.", "Take on responsibility for drafting one stakeholder communication per week and review it with your line manager before sending.", "During your next crisis or high-pressure situation, keep a real-time log of every communication decision you make, including who you contacted, in what order, and why. Review this log in your next one-to-one."],
-    social: ["Ask your line manager to observe one of your team briefings and provide structured feedback on your communication style and audience engagement.", "Request to be mentored by a senior communications or operations leader who manages regular high-stakes stakeholder communications. Ask to shadow them in at least two live situations."],
-    formal: ["Complete the course Communication Foundations on LinkedIn Learning (approximately 1.5 hours) focusing on adapting style for different audiences.", "Complete Crisis Communication on Coursera offered by the University of Washington (approximately 8 hours) to build a structured framework for communicating under pressure."],
+    onJob: ["Volunteer to lead the next team briefing or operational update meeting and ask a colleague to give you structured feedback on clarity, tone, and audience awareness afterwards.", "Take on responsibility for drafting one stakeholder communication per week - whether a formal update, a passenger statement, or an internal briefing - and review it with your line manager before sending.", "During your next crisis or high-pressure situation, keep a real-time log of every communication decision you make, including who you contacted, in what order, and why. Review this log in your next one-to-one with your manager."],
+    social: ["Ask your line manager to observe one of your team briefings and provide structured feedback on your communication style, use of language, and audience engagement. Agree on two specific areas to improve before the next session.", "Request to be mentored by a senior leader who regularly manages high-stakes stakeholder communications. Ask to shadow them in at least two live situations and debrief with them on their communication choices afterwards."],
+    formal: ["Complete 'Inspiring and Motivating Individuals' on Coursera, offered by the University of Michigan as part of the Leadership specialisation - self-paced, approximately 6 hours. This course covers how to communicate vision and build commitment across diverse audiences.", "Complete 'Negotiation, Mediation and Conflict Resolution' on Coursera, offered by ESSEC Business School - self-paced, approximately 10 hours. Directly applicable to high-stakes communication with difficult stakeholders."],
   },
   Accountability: {
-    onJob: ["In your next team meeting, introduce a brief lessons learned segment where the team reviews one recent issue and identifies what systemic change would prevent recurrence.", "When something goes wrong in your area of responsibility, practice writing a one-page accountability memo to yourself that distinguishes between what you personally owned, what was a systemic failure, and what you would do differently.", "Set up a simple accountability tracker for your team that logs commitments made, deadlines, and outcomes. Review it weekly."],
-    social: ["Ask your line manager to coach you on how to conduct a post-incident debrief that balances accountability with psychological safety.", "Request a mentoring conversation with a senior leader who has navigated a significant accountability challenge."],
-    formal: ["Complete Developing a Culture of Accountability on LinkedIn Learning (approximately 1 hour).", "Complete Organizational Leadership on Coursera offered by Northwestern University (approximately 4 hours) with a focus on the accountability and governance modules."],
+    onJob: ["In your next team meeting, introduce a brief lessons learned segment where the team reviews one recent issue, identifies the root cause, and agrees on one systemic change to prevent recurrence. Document and share the outcome.", "When something goes wrong in your area of responsibility, practice writing a one-page accountability memo that distinguishes between what you personally owned, what was a systemic or process failure, and what you would do differently next time.", "Set up a simple accountability tracker for your team that logs commitments made, owners, deadlines, and outcomes. Review it in every weekly team meeting and share a summary with your line manager monthly."],
+    social: ["Ask your line manager to coach you on how to conduct a post-incident debrief that balances accountability with psychological safety. Ask them to walk you through a real example they have managed and what they learned from it.", "Request a mentoring conversation with a senior leader who has navigated a significant accountability challenge - ideally one that involved both individual and systemic dimensions. Ask them to describe how they separated the two."],
+    formal: ["Complete 'Organisational Leadership' on Coursera, offered by Northwestern University - self-paced, approximately 4 hours. The governance and accountability modules are directly relevant to building accountability frameworks in operational environments.", "Complete 'Exercising Leadership: Foundational Principles' on Harvard Business School Online (HBSx) via edX - self-paced, approximately 7 weeks. Covers personal accountability, adaptive leadership, and leading through difficult situations."],
   },
   "Strategic Thinking": {
-    onJob: ["Over the next 30 days, write a one-page strategic analysis of a challenge your team or department is facing. Include a SWOT analysis, at least three strategic options, and a recommended course of action with rationale.", "In your next planning cycle, deliberately take a three-year view before a three-month view. Write down what success looks like in three years and work backwards to identify what must happen in the next 90 days.", "Identify one decision you are involved in over the next month and map out the second and third-order consequences of each option before making a recommendation."],
-    social: ["Ask your line manager to include you in one strategic planning or business review meeting above your current level as a learning opportunity.", "Request a mentoring relationship with a senior leader who has experience in strategic planning."],
-    formal: ["Complete Strategic Planning and Execution on Coursera offered by the University of Virginia Darden School (approximately 10 hours).", "Complete Business Strategy on LinkedIn Learning (approximately 2 hours)."],
+    onJob: ["Over the next 30 days, write a one-page strategic analysis of a challenge your team or department is facing. Include a SWOT analysis, at least three strategic options with pros and cons for each, and a recommended course of action with a clear rationale.", "In your next planning cycle, deliberately take a three-year view before a three-month view. Write down what success looks like in three years, then work backwards to identify what must happen in the next 90 days to stay on track.", "Identify one decision you are involved in over the next month and map out the second and third-order consequences of each option before making your recommendation. Share this analysis with your line manager."],
+    social: ["Ask your line manager to include you in one strategic planning or business review meeting above your current level as a learning opportunity. Prepare a one-page briefing in advance and share your own perspective with your manager after the meeting.", "Request a mentoring relationship with a senior leader who has experience in strategic planning or organisational transformation. Ask them to review one of your strategic analysis documents and provide structured, specific feedback."],
+    formal: ["Complete 'Business Strategy' on Coursera, offered by the University of Virginia Darden School of Business - self-paced, approximately 10 hours. Covers competitive analysis, strategic positioning, and sequencing - directly applicable to airline and operations contexts.", "Complete 'Disruptive Strategy' on Harvard Business School Online - self-paced, approximately 6 weeks. Taught using the case study method, this course builds rigorous strategic thinking skills and is recognised by employers across industries."],
   },
   "Decision Making": {
-    onJob: ["For the next four weeks, document every significant decision you make using a simple framework: what was the question, what options did you consider, what information did you have and what were you missing, and what was your rationale.", "In your next team challenge, deliberately pause before deciding and ask two colleagues for their perspective before forming your recommendation.", "Identify a recent decision that did not go as planned. Write a one-page retrospective."],
-    social: ["Ask your line manager to coach you on how they approach high-stakes decisions under time pressure.", "Request to be included in a decision-making process above your current level as an observer. Prepare your own recommendation in advance and debrief with your manager."],
-    formal: ["Complete Decision Making and Scenarios on Coursera offered by the University of Cape Town (approximately 6 hours).", "Complete Making Evidence-Based Management Decisions on LinkedIn Learning (approximately 1 hour)."],
+    onJob: ["For the next four weeks, document every significant decision you make using a simple four-part framework: what was the question, what options did you consider, what information did you have and what were you missing, and what was your rationale for the choice you made.", "In your next team challenge, deliberately pause before deciding and ask at least two colleagues for their perspective before forming your recommendation. Note specifically how their input changed or confirmed your thinking.", "Identify a recent decision that did not go as planned. Write a one-page retrospective that honestly examines what you would do differently, what information you wish you had sought earlier, and what the systemic learning is for your team."],
+    social: ["Ask your line manager to coach you on how they approach high-stakes decisions under time pressure. Ask them to walk you through a specific example from their own experience, including what they got wrong and why.", "Request to be included in a significant decision-making process above your current level as an observer. Prepare your own recommendation in advance, compare it with the actual outcome, and debrief with your manager on the differences."],
+    formal: ["Complete 'Decision Making and Scenarios' on Coursera, offered by the University of Cape Town - self-paced, approximately 6 hours. Builds structured decision frameworks applicable to complex operational and strategic environments.", "Complete 'Leadership Principles' on Harvard Business School Online - self-paced, approximately 6 weeks. Covers decision-making under uncertainty, managing trade-offs, and leading with integrity - directly relevant to the competency assessed."],
   },
   "People Leadership": {
-    onJob: ["In your next one-to-one with each team member, ask three questions you have never asked before: what is one thing about your role that you find most meaningful, what is one thing that gets in the way of your best work, and what would help you grow in the next six months.", "Over the next 30 days, make a deliberate effort to recognise one team member per day for a specific contribution.", "Identify one team member who is underperforming and schedule a structured conversation using the SBI feedback model (Situation, Behaviour, Impact)."],
-    social: ["Ask your line manager to coach you on how they have managed a resistant or disengaged team member.", "Request a mentoring relationship with an experienced people leader who has led through a significant team challenge such as a restructure or culture change."],
-    formal: ["Complete Leading with Emotional Intelligence on LinkedIn Learning (approximately 2.5 hours).", "Complete Inspiring and Motivating Individuals on Coursera offered by the University of Michigan (approximately 6 hours)."],
+    onJob: ["In your next one-to-one with each team member, ask three questions you have not asked before: what is one thing about your role that you find most meaningful, what is one thing that consistently gets in the way of your best work, and what would most help you grow in the next six months. Document the answers and follow up on at least one action per person.", "Over the next 30 days, make a deliberate effort to recognise one team member per day for a specific contribution - not a generic well done, but a named behaviour and its impact. Note their reaction and reflect on what type of recognition lands best with different people.", "Identify one team member who is underperforming and schedule a structured one-to-one conversation using the SBI feedback model: describe the Situation, the specific Behaviour you observed, and the Impact it had. Follow up with a written summary and agreed actions."],
+    social: ["Ask your line manager to coach you on how they have managed a resistant or disengaged team member. Ask them to role-play a difficult conversation with you and provide specific feedback on your approach, tone, and listening skills.", "Request a mentoring relationship with an experienced people leader - ideally someone who has led through a significant team challenge such as a restructure, culture change, or engagement crisis. Meet monthly and bring a real leadership challenge to each session."],
+    formal: ["Complete 'Inspiring and Motivating Individuals' on Coursera, offered by the University of Michigan - self-paced, approximately 6 hours. Covers motivation theory, recognition, and building a high-performance team culture applicable to large operational workforces.", "Complete 'Management Essentials' on Harvard Business School Online - self-paced, approximately 6 weeks. Teaches the core tools of people management including performance conversations, delegation, and building accountability - taught using real business cases."],
   },
 };
 
@@ -283,7 +283,7 @@ export default function App() {
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [ratingNotes, setRatingNotes] = useState({});
   const [notification, setNotification] = useState(null);
-  const [approvalSaved, setApprovalSaved] = useState({});
+  const [aiRatingsFailed, setAiRatingsFailed] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   const timerRef = useRef(null);
@@ -337,24 +337,24 @@ export default function App() {
       setRatings(prev => ({ ...prev, ...nRat })); setReportData(prev => ({ ...prev, ...nRd })); setAiRatings(prev => ({ ...prev, ...nAi }));
       const nReq = {};
       (req || []).forEach(r => { nReq[`${pid}-${r.module_id}`] = r.status; });
-      const prevReqs = { ...reportRequests };
-      setReportRequests(prev => ({ ...prev, ...nReq }));
-      // Check for newly approved reports and show notification
+      // Show notification for newly approved reports
       Object.entries(nReq).forEach(([key, status]) => {
-        if (status === "approved" && prevReqs[key] !== "approved") {
+        if (status === "approved" && reportRequests[key] !== "approved") {
           setNotification({ type: "success", message: "Your development report has been approved and is ready to download!" });
           setTimeout(() => setNotification(null), 8000);
         }
       });
+      setReportRequests(prev => ({ ...prev, ...nReq }));
     } catch { }
   }
 
   async function loadAllData() {
     try {
-      const [res, rat, req] = await Promise.all([
+      const [res, rat, req, promo] = await Promise.all([
         sb("ac_results", "GET", null, "?select=*"),
         sb("ac_ratings", "GET", null, "?select=*"),
         sb("ac_report_requests", "GET", null, "?select=*"),
+        sb("ac_promotion_recs", "GET", null, "?select=*"),
       ]);
       const nr = {};
       (res || []).forEach(r => { if (!nr[r.participant_id]) nr[r.participant_id] = {}; nr[r.participant_id][r.module_id] = { answers: r.answers || {}, timeSpent: r.time_spent || 0, completedAt: r.completed_at, simMessages: r.sim_messages || [] }; });
@@ -365,6 +365,9 @@ export default function App() {
       const nReq = {};
       (req || []).forEach(r => { nReq[`${r.participant_id}-${r.module_id}`] = r.status; });
       setReportRequests(nReq);
+      const nPromo = {};
+      (promo || []).forEach(r => { nPromo[`${r.participant_id}-${r.module_id}`] = r.recommendation; });
+      setPromotionRecs(nPromo);
     } catch { }
   }
 
@@ -553,12 +556,17 @@ export default function App() {
       const key = `${pid}-${mid}`;
       setAiRatings(prev => ({ ...prev, [key]: fallback })); setRatings(prev => ({ ...prev, [key]: fb })); setReportData(prev => ({ ...prev, [key]: fallback }));
       await saveRatings(pid, mid, fb, fallback, fallback);
-      alert("AI ratings could not be generated automatically. Default scores of 3 have been applied. Please review and adjust manually.");
+      setAiRatingsFailed(prev => ({ ...prev, [key]: true }));
     }
     setGeneratingReport(false);
   }
 
-  async function updateRating(pid, mid, comp, score) {
+  async function savePromotionRec(pid, mid, value) {
+    setPromotionRecs(prev => ({ ...prev, [`${pid}-${mid}`]: value }));
+    try {
+      await sb("ac_promotion_recs", "POST", { participant_id: pid, module_id: mid, recommendation: value, updated_at: new Date().toISOString() }, "");
+    } catch (e) { console.error("Save promotion rec error:", e); }
+  }
     const key = `${pid}-${mid}`;
     const newR = { ...(ratings[key] || {}), [comp]: score };
     setRatings(prev => ({ ...prev, [key]: newR }));
@@ -1290,17 +1298,23 @@ export default function App() {
                           </div>
                         )}
                         {reportRequests[key] === "approved" && <span style={{ fontSize: 12, color: "#16a34a", fontWeight: 600 }}>✓ Report approved</span>}
-                        <button onClick={() => generateAIRatings(p.id, mod.id)} disabled={generatingReport} style={{ ...S.btn("#fff", "#555"), opacity: generatingReport ? 0.6 : 1 }}>Generate AI ratings</button>
+                        <button onClick={() => generateAIRatings(p.id, mod.id)} disabled={generatingReport} style={{ ...S.btn(aiRatingsFailed[key] ? "#fffbeb" : "#fff", aiRatingsFailed[key] ? "#92400e" : "#555"), border: `1px solid ${aiRatingsFailed[key] ? "#fde68a" : "#ddd"}`, opacity: generatingReport ? 0.6 : 1 }}>{aiRatingsFailed[key] ? "Retry AI ratings" : "Generate AI ratings"}</button>
                         <button onClick={() => downloadAssessorPDF(p.id, mod.id)} style={S.btn(CCM_RED, "#fff")}>Download Assessor PDF</button>
                         <button onClick={() => downloadParticipantPDF(p.id, mod.id)} style={S.btn("#f9f9f9", "#555")}>Download Participant PDF</button>
                       </div>
                     </div>
+                    {aiRatingsFailed[key] && (
+                      <div style={{ marginBottom: "1rem", padding: "0.875rem", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10 }}>
+                        <p style={{ margin: "0 0 4px", fontSize: 13, fontWeight: 700, color: "#92400e" }}>AI ratings could not be generated automatically</p>
+                        <p style={{ margin: 0, fontSize: 13, color: "#78350f", lineHeight: 1.6 }}>Default scores of 3 have been applied as a starting point. This usually happens when the participant's written answers are very brief or the interview transcript is short. Please review the written responses in the Dashboard tab and adjust each competency rating manually using the 1-5 buttons below. You can also click "Retry AI ratings" above to try again.</p>
+                      </div>
+                    )}
                     <div style={{ marginBottom: "1rem", padding: "0.875rem", background: "#f9f9f9", border: "1px solid #e5e5e5", borderRadius: 10 }}>
                       <p style={S.label}>Assessor recommendation</p>
-                      <select value={promotionRecs[key] || ""} onChange={e => setPromotionRecs(prev => ({ ...prev, [key]: e.target.value }))} style={{ ...S.input, fontSize: 13 }}>
+                      <select value={promotionRecs[key] || ""} onChange={e => savePromotionRec(p.id, mod.id, e.target.value)} style={{ ...S.input, fontSize: 13 }}>
                         {PROMOTION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
-                      <p style={{ margin: "6px 0 0", fontSize: 12, color: "#888" }}>This recommendation appears in the Assessor PDF only. It is not shared with the participant.</p>
+                      <p style={{ margin: "6px 0 0", fontSize: 12, color: "#888" }}>Saved automatically. Not shared with the participant.</p>
                     </div>
                     {mod.competencies.map(comp => {
                       const aiSug = aiR?.ratings?.[comp];
