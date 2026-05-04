@@ -283,6 +283,7 @@ export default function App() {
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [ratingNotes, setRatingNotes] = useState({});
   const [notification, setNotification] = useState(null);
+  const [approvalSaved, setApprovalSaved] = useState({});
   const [aiRatingsFailed, setAiRatingsFailed] = useState({});
   const [confirmDelete, setConfirmDelete] = useState(null);
 
@@ -1311,7 +1312,7 @@ export default function App() {
                     )}
                     <div style={{ marginBottom: "1rem", padding: "0.875rem", background: "#f9f9f9", border: "1px solid #e5e5e5", borderRadius: 10 }}>
                       <p style={S.label}>Assessor recommendation</p>
-                      <select value={promotionRecs[key] || ""} onChange={e => savePromotionRec(p.id, mod.id, e.target.value)} style={{ ...S.input, fontSize: 13 }}>
+                      <select value={promotionRecs[key] || ""} onChange={e => { const val = e.target.value; savePromotionRec(p.id, mod.id, val); }} style={{ ...S.input, fontSize: 13 }}>
                         {PROMOTION_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
                       <p style={{ margin: "6px 0 0", fontSize: 12, color: "#888" }}>Saved automatically. Not shared with the participant.</p>
