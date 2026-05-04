@@ -562,7 +562,9 @@ export default function App() {
     setGeneratingReport(false);
   }
 
-  async function savePromotionRec(pid, mid, value) {
+  function handleRatingClick(pid, mid, comp, score) {
+    updateRating(pid, mid, comp, score);
+  }
     setPromotionRecs(prev => ({ ...prev, [`${pid}-${mid}`]: value }));
     try {
       await sb("ac_promotion_recs", "POST", { participant_id: pid, module_id: mid, recommendation: value, updated_at: new Date().toISOString() }, "");
@@ -1329,7 +1331,7 @@ export default function App() {
                           </div>
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: "0.75rem" }}>
                             {RUBRIC.map(rb => (
-                              <button key={rb.score} onClick={() => updateRating(p.id, mod.id, comp, rb.score)} style={{ padding: "6px 14px", fontSize: 13, fontWeight: 600, background: cur === rb.score ? rb.color : "#fff", color: cur === rb.score ? "#fff" : rb.color, border: `2px solid ${rb.color}`, borderRadius: 8, cursor: "pointer" }}>{rb.score}</button>
+                              <button key={rb.score} onClick={() => handleRatingClick(p.id, mod.id, comp, rb.score)} style={{ padding: "6px 14px", fontSize: 13, fontWeight: 600, background: cur === rb.score ? rb.color : "#fff", color: cur === rb.score ? "#fff" : rb.color, border: `2px solid ${rb.color}`, borderRadius: 8, cursor: "pointer" }}>{rb.score}</button>
                             ))}
                             {cur && <span style={{ fontSize: 13, color: RUBRIC.find(rb => rb.score === cur)?.color, fontWeight: 600, padding: "6px 0" }}> - {RUBRIC.find(rb => rb.score === cur)?.label}</span>}
                           </div>
