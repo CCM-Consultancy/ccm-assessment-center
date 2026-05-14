@@ -58,9 +58,7 @@ function KeywordEditor({ keywords, onChange }) {
 
 // ─── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
-  useEffect(() => {
-  if (screen === "admin") loadLibComps();
-}, [screen]);
+ 
   const [screen, setScreen]         = useState("login");
   const [role,   setRole]           = useState(null);       // "admin" | "participant"
   const [session, setSession]       = useState(null);       // loaded participant session
