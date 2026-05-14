@@ -1,0 +1,367 @@
+import { RUBRIC, RUBRIC_COLOR_MAP, PROMOTION_OPTIONS } from "./constants";
+
+export async function callClaude({ system, messages, maxTokens = 400 }) {
+  const res = await fetch("/.netlify/functions/generate-ratings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ system, messages, maxTokens }),
+  });
+  if (!res.ok) {
+    let msg = `AI service error ${res.status}`;
+    try { msg = (await res.json()).error || msg; } catch {}
+    throw new Error(msg);
+  }
+  const { text } = await res.json();
+  return text;
+}
+
+// detectCompetency uses the case study's competencies (with keywords) instead of hardcoded ones
+export function detectCompetency(text, competencies = []) {
+  if (!text || !competencies.length) return "General";
+  const lower = text.toLowerCase();
+  let best = null, bestScore = 0;
+  for (const comp of competencies) {
+    const score = (comp.keywords || []).filter(k => lower.includes(k.toLowerCase())).length;
+    if (score > bestScore) { bestScore = score; best = comp.name; }
+  }
+  return best || "General";
+}
+
+// generateAIRatings — blank answers get score 0 and are flagged not_attempted
+export async function generateAIRatings({ participant, mod, competencies, result }) {
+  const answersText = mod.questions.map(q => {
+    const ans = (result?.answers?.[q.id] || "").trim();
+    const compName = (competencies.find(c => c.id === q.competency_id) || {}).name || "";
+    return `[${compName}] Q: ${q.text_advanced || q.text}\nA: ${ans || "BLANK — no answer provided"}`;
+  }).join("\n\n");
+
+  const transcriptText = ((result?.sim_messages) || [])
+    .filter(m => m.text)
+    .map(m => `${m.role === "assessor" ? "Assessor" : "Candidate"}: ${m.text}`)
+    .join("\n")
+    .substring(0, 3000);
+
+  const compList = competencies.map(c => `"${c.id}"`).join(",");
+  const compListFull = competencies.map(c => `"${c.id}":"${c.name}"`).join(",");
+
+  const prompt = `You are an expert assessment centre analyst for CCM Consultancy. Do not use em dashes.
+
+Participant: ${participant.name}
+Role: ${participant.role || "Not specified"}
+Level: ${mod._levelName || ""}
+Module: ${mod.title}
+Competencies assessed: ${competencies.map(c => c.name).join(", ")}
+
+Written answers:
+${answersText}
+
+Interview transcript:
+${transcriptText || "No interview transcript available."}
+
+IMPORTANT: If a written answer is BLANK, assign score 0 and mark it as not_attempted.
+
+Rate each competency 1-5 (0 if blank/not attempted). Return valid JSON only — no markdown:
+{
+  "ratings": {${competencies.map(c => `"${c.id}":3`).join(",")}},
+  "not_attempted": {${competencies.map(c => `"${c.id}":false`).join(",")}},
+  "interpretations": {${competencies.map(c => `"${c.id}":"2-3 sentence third-person interpretation"`).join(",")}},
+  "strengths": {${competencies.map(c => `"${c.id}":"key strengths observed"`).join(",")}},
+  "improvements": {${competencies.map(c => `"${c.id}":"areas for development"`).join(",")}},
+  "overallNarrative": "3-4 sentence overall summary",
+  "developmentPlan": ["action 1","action 2","action 3"]
+}`;
+
+  const text = await callClaude({
+    system: "Return only valid JSON. No markdown. No em dashes.",
+    messages: [{ role: "user", content: prompt }],
+    maxTokens: 2000,
+  });
+
+  if (!text) throw new Error("No response");
+  const parsed = JSON.parse(text.replace(/```json|```/g, "").replace(/—/g, "-").trim());
+  if (!parsed.ratings) throw new Error("Invalid structure");
+
+  // Enforce: blank answers must be 0
+  mod.questions.forEach(q => {
+    const ans = (result?.answers?.[q.id] || "").trim();
+    if (!ans) {
+      parsed.ratings[q.competency_id] = 0;
+      if (!parsed.not_attempted) parsed.not_attempted = {};
+      parsed.not_attempted[q.competency_id] = true;
+    }
+  });
+
+  return parsed;
+}
+
+// ─── PDF helpers ───────────────────────────────────────────────────────────────
+
+function loadJsPDF() {
+  return new Promise(resolve => {
+    if (window.jspdf) { resolve(window.jspdf.jsPDF); return; }
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+    s.onload = () => resolve(window.jspdf.jsPDF);
+    document.head.appendChild(s);
+  });
+}
+
+function pdfSetup(doc) {
+  const W = 210, margin = 20, cW = W - margin * 2;
+  let y = margin;
+  const checkPage = (needed = 20) => { if (y + needed > 275) { doc.addPage(); y = margin; } };
+  const addText = (text, x, fontSize, bold, color) => {
+    doc.setFontSize(fontSize || 11);
+    doc.setFont("helvetica", bold ? "bold" : "normal");
+    doc.setTextColor(...(color || [17, 17, 17]));
+    const lines = doc.splitTextToSize(String(text), cW - (x - margin));
+    doc.text(lines, x, y);
+    y += lines.length * ((fontSize || 11) * 0.45) + 2;
+  };
+  const addSection = (title) => {
+    checkPage(12); y += 4;
+    doc.setFillColor(232, 37, 26); doc.rect(margin, y, cW, 0.5, "F"); y += 4;
+    addText(title, margin, 13, true, [232, 37, 26]); y += 2;
+  };
+  const redHeader = (right) => {
+    doc.setFillColor(232, 37, 26); doc.rect(0, 0, 210, 12, "F");
+    doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(255, 255, 255);
+    doc.text("CCM CONSULTANCY", margin, 8);
+    doc.setFontSize(8); doc.setFont("helvetica", "normal");
+    doc.text(right, W - margin, 8, { align: "right" });
+  };
+  return { W, margin, cW, addText, addSection, redHeader, checkPage, getY: () => y, setY: (v) => { y = v; } };
+}
+
+export async function downloadAssessorPDF({
+  participant, levelName, mod, competencies, questions,
+  result, ratings, reportData, devActivities, ratingNotes,
+  promotionRec, assessorName, weights,
+}) {
+  const jsPDF = await loadJsPDF();
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const { margin, cW, addText, addSection, redHeader, checkPage, getY, setY } = pdfSetup(doc);
+  let y;
+  const setDocY = (v) => { setY(v); y = v; };
+
+  redHeader("ASSESSMENT CENTRE - ASSESSOR REPORT (CONFIDENTIAL)");
+  setDocY(22);
+
+  addText("Assessor Report", margin, 16, true); setDocY(getY() + 2);
+  addText(`CCM Consultancy Assessment Centre | ${new Date().toLocaleDateString()}`, margin, 9, false, [120, 120, 120]);
+  setDocY(getY() + 6);
+
+  const promLabel = (PROMOTION_OPTIONS.find(o => o.value === promotionRec) || {}).label || "Not yet selected";
+  const tableRows = [
+    ["Participant", participant.name, "Level", levelName],
+    ["Role assessed", participant.role || "Not specified", "Assessor", assessorName || "CCM Consultancy"],
+    ["Module", mod.title, "Date", new Date().toLocaleDateString()],
+    ["Time on task", `${Math.round(((result?.time_spent) || 0) / 60)} min`, "Weightings", `Written ${weights.written}% / Interview ${weights.interview}% / Role play ${weights.roleplay}%`],
+  ];
+
+  tableRows.forEach((row, i) => {
+    checkPage(10);
+    if (i % 2 === 0) doc.setFillColor(249, 249, 249); else doc.setFillColor(255, 255, 255);
+    const cy = getY();
+    doc.rect(margin, cy - 4, cW, 9, "F");
+    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(80, 80, 80); doc.text(row[0], margin + 2, cy);
+    doc.setFont("helvetica", "normal"); doc.setTextColor(17, 17, 17); doc.text(String(row[1]).substring(0, 40), margin + 45, cy);
+    doc.setFont("helvetica", "bold"); doc.setTextColor(80, 80, 80); doc.text(row[2], margin + 105, cy);
+    doc.setFont("helvetica", "normal"); doc.setTextColor(17, 17, 17); doc.text(String(row[3]).substring(0, 35), margin + 148, cy);
+    setDocY(cy + 9);
+  });
+
+  setDocY(getY() + 4);
+  checkPage(12);
+  doc.setFillColor(255, 241, 241); doc.rect(margin, getY() - 4, cW, 10, "F");
+  doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(153, 27, 27);
+  doc.text("CONFIDENTIAL - For the assessing team and authorised client representatives only.", margin + 2, getY());
+  setDocY(getY() + 10);
+
+  addSection("Assessor Recommendation");
+  checkPage(12);
+  doc.setFillColor(239, 246, 255); doc.rect(margin, getY() - 4, cW, 12, "F");
+  doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(3, 105, 161);
+  doc.text(promLabel, margin + 2, getY() + 2); setDocY(getY() + 14);
+
+  addSection("Competency Ratings and Assessment");
+  competencies.forEach(comp => {
+    const score = (ratings || {})[comp.id];
+    const notAttempted = reportData?.not_attempted?.[comp.id];
+    checkPage(35);
+    const rb = RUBRIC.find(r => r.score === score) || RUBRIC[2];
+    const col = notAttempted ? [120, 120, 120] : (RUBRIC_COLOR_MAP[rb.color] || [17, 17, 17]);
+    doc.setFillColor(...col); doc.rect(margin, getY() - 4, 2, 14, "F");
+    doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(...col);
+    const scoreLabel = notAttempted ? `${comp.name}: Not attempted` : `${comp.name}: ${score}/5 - ${rb.label}`;
+    doc.text(scoreLabel, margin + 5, getY()); setDocY(getY() + 7);
+    if (notAttempted) {
+      doc.setFontSize(9); doc.setFont("helvetica", "italic"); doc.setTextColor(120, 120, 120);
+      doc.text("No written response was provided for this competency. Score recorded as 0.", margin + 5, getY());
+      setDocY(getY() + 5);
+    } else {
+      if (reportData?.interpretations?.[comp.id]) { doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60); const lines = doc.splitTextToSize(`Assessment: ${reportData.interpretations[comp.id]}`, cW - 5); doc.text(lines, margin + 5, getY()); setDocY(getY() + lines.length * 4 + 2); }
+      if (reportData?.strengths?.[comp.id])      { doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(22, 101, 52); doc.text("Strengths:", margin + 5, getY()); doc.setFont("helvetica", "normal"); const lines = doc.splitTextToSize(reportData.strengths[comp.id], cW - 30); doc.text(lines, margin + 25, getY()); setDocY(getY() + lines.length * 4 + 2); }
+      if (reportData?.improvements?.[comp.id])   { doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(153, 27, 27); doc.text("For development:", margin + 5, getY()); doc.setFont("helvetica", "normal"); const lines = doc.splitTextToSize(reportData.improvements[comp.id], cW - 40); doc.text(lines, margin + 40, getY()); setDocY(getY() + lines.length * 4 + 2); }
+    }
+    const noteKey = `${comp.id}`;
+    if (ratingNotes?.[noteKey]) { doc.setFontSize(9); doc.setFont("helvetica", "italic"); doc.setTextColor(80, 80, 80); const lines = doc.splitTextToSize(`Assessor notes: ${ratingNotes[noteKey]}`, cW - 5); doc.text(lines, margin + 5, getY()); setDocY(getY() + lines.length * 4 + 2); }
+    setDocY(getY() + 4);
+  });
+
+  if (reportData?.overallNarrative) {
+    addSection("Overall Performance Summary");
+    checkPage(20);
+    doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
+    const lines = doc.splitTextToSize(reportData.overallNarrative, cW);
+    doc.text(lines, margin, getY()); setDocY(getY() + lines.length * 5 + 4);
+  }
+
+  addSection("Written Responses");
+  (questions || []).forEach((q, qi) => {
+    checkPage(25);
+    doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(120, 120, 120);
+    const compName = (competencies.find(c => c.id === q.competency_id) || {}).name || "";
+    doc.text(`[${compName}] Question ${qi + 1}`, margin, getY()); setDocY(getY() + 5);
+    doc.setFont("helvetica", "normal"); doc.setTextColor(17, 17, 17);
+    const qLines = doc.splitTextToSize(q.text_advanced || q.text || "", cW);
+    doc.text(qLines, margin, getY()); setDocY(getY() + qLines.length * 4 + 3);
+    checkPage(15);
+    const ans = ((result?.answers || {})[q.id] || "").trim() || "Not attempted — no written response provided";
+    const aLines = doc.splitTextToSize(ans, cW - 4);
+    doc.setFillColor(249, 249, 249); doc.rect(margin, getY() - 3, cW, aLines.length * 4.5 + 4, "F");
+    doc.setFontSize(9); doc.text(aLines, margin + 2, getY()); setDocY(getY() + aLines.length * 4.5 + 8);
+  });
+
+  addSection("Development Recommendations (70-20-10)");
+  competencies.forEach(comp => {
+    const da = (devActivities || []).find(d => d.competency_id === comp.id);
+    if (!da) return;
+    checkPage(20);
+    doc.setFontSize(11); doc.setFont("helvetica", "bold"); doc.setTextColor(232, 37, 26);
+    doc.text(comp.name, margin, getY()); setDocY(getY() + 6);
+    [["70% - On the job", da.on_job || []], ["20% - Learning from others", da.social || []], ["10% - Formal learning", da.formal || []]].forEach(([label, items]) => {
+      checkPage(10); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(80, 80, 80);
+      doc.text(label, margin + 2, getY()); setDocY(getY() + 5);
+      items.forEach((item, i) => {
+        checkPage(8); doc.setFont("helvetica", "normal"); doc.setTextColor(50, 50, 50);
+        const lines = doc.splitTextToSize(`${i + 1}. ${item}`, cW - 6);
+        doc.text(lines, margin + 4, getY()); setDocY(getY() + lines.length * 4 + 2);
+      });
+      setDocY(getY() + 2);
+    });
+    setDocY(getY() + 4);
+  });
+
+  doc.save(`CCM_Assessor_Report_${participant.name.replace(/\s/g, "_")}_${mod.title.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`);
+}
+
+export async function downloadParticipantPDF({
+  participant, levelName, mod, competencies, result, ratings, reportData, devActivities,
+}) {
+  const jsPDF = await loadJsPDF();
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const { margin, cW, addText, addSection, redHeader, checkPage, getY, setY } = pdfSetup(doc);
+  let y;
+  const setDocY = (v) => { setY(v); y = v; };
+
+  redHeader("PERSONAL DEVELOPMENT REPORT");
+  setDocY(22);
+
+  doc.setFontSize(18); doc.setFont("helvetica", "bold"); doc.setTextColor(17, 17, 17);
+  doc.text("Personal Development Report", margin, getY()); setDocY(getY() + 10);
+  doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 100, 100);
+  doc.text(`Prepared for: ${participant.name}`, margin, getY()); setDocY(getY() + 6);
+  doc.text(`Role: ${participant.role || "Not specified"} | Level: ${levelName}`, margin, getY()); setDocY(getY() + 6);
+  doc.text(`Module assessed: ${mod.title}`, margin, getY()); setDocY(getY() + 6);
+  doc.text(`Date: ${new Date().toLocaleDateString()}`, margin, getY()); setDocY(getY() + 10);
+  doc.setFillColor(232, 37, 26); doc.rect(margin, getY(), cW, 0.5, "F"); setDocY(getY() + 6);
+
+  addSection("Introduction");
+  checkPage(20);
+  doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
+  const intro = `${participant.name} participated in the CCM Consultancy Assessment Centre as part of a structured competency evaluation. The assessment covered the module ${mod.title}, which assessed the competencies of ${competencies.map(c => c.name).join(" and ")}. This report summarises ${participant.name}'s performance across the assessed competencies and provides a personalised development plan structured using the 70-20-10 learning framework.`;
+  const introLines = doc.splitTextToSize(intro, cW);
+  doc.text(introLines, margin, getY()); setDocY(getY() + introLines.length * 5 + 8);
+
+  addSection("Competency Performance");
+  const hasRatings = Object.keys(ratings || {}).length > 0;
+
+  if (!hasRatings) {
+    checkPage(20);
+    doc.setFillColor(255, 251, 235); doc.rect(margin, getY() - 4, cW, 18, "F");
+    doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(120, 83, 0);
+    doc.text("Assessment under review.", margin + 3, getY() + 2);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(120, 83, 0);
+    const wLines = doc.splitTextToSize("Your assessor is currently reviewing your responses. Your competency ratings and personalised development plan will be included in your final report once the review is complete.", cW - 6);
+    doc.text(wLines, margin + 3, getY() + 8); setDocY(getY() + 24);
+  } else {
+    competencies.forEach(comp => {
+      const score = (ratings || {})[comp.id];
+      const notAttempted = reportData?.not_attempted?.[comp.id];
+      checkPage(30);
+      const rb = RUBRIC.find(r => r.score === score) || RUBRIC[2];
+      const col = notAttempted ? [120, 120, 120] : (RUBRIC_COLOR_MAP[rb.color] || [17, 17, 17]);
+      doc.setFillColor(...col); doc.rect(margin, getY() - 4, 3, 16, "F");
+      doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(...col);
+      doc.text(comp.name, margin + 6, getY()); setDocY(getY() + 6);
+      doc.setFontSize(10);
+      doc.text(notAttempted ? "Not attempted — score: 0" : `${score}/5 - ${rb.label}`, margin + 6, getY()); setDocY(getY() + 6);
+      if (!notAttempted && reportData?.interpretations?.[comp.id]) {
+        doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
+        const lines = doc.splitTextToSize(reportData.interpretations[comp.id], cW - 8);
+        doc.text(lines, margin + 6, getY()); setDocY(getY() + lines.length * 4 + 4);
+      }
+      setDocY(getY() + 3);
+    });
+
+    if (reportData?.overallNarrative) {
+      checkPage(20);
+      doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(17, 17, 17);
+      doc.text("Overall Summary", margin, getY()); setDocY(getY() + 6);
+      doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
+      const lines = doc.splitTextToSize(reportData.overallNarrative, cW);
+      doc.text(lines, margin, getY()); setDocY(getY() + lines.length * 5 + 6);
+    }
+
+    addSection("Personalised Development Plan (70-20-10 Framework)");
+    checkPage(20);
+    doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(80, 80, 80);
+    const fwText = "The 70-20-10 framework reflects research evidence that most effective professional learning happens through on-the-job experience (70%), learning from others such as mentors and coaches (20%), and formal structured learning (10%).";
+    const fwLines = doc.splitTextToSize(fwText, cW);
+    doc.text(fwLines, margin, getY()); setDocY(getY() + fwLines.length * 4 + 8);
+
+    competencies.forEach(comp => {
+      const da = (devActivities || []).find(d => d.competency_id === comp.id);
+      if (!da) return;
+      checkPage(25);
+      doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(232, 37, 26);
+      doc.text(comp.name, margin, getY()); setDocY(getY() + 7);
+      [["70% - On the job (learning by doing)", da.on_job || []], ["20% - Learning from others (mentoring and coaching)", da.social || []], ["10% - Formal learning", da.formal || []]].forEach(([label, items]) => {
+        checkPage(12); doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(80, 80, 80);
+        doc.text(label, margin + 2, getY()); setDocY(getY() + 5);
+        items.forEach((item, i) => {
+          checkPage(10); doc.setFont("helvetica", "normal"); doc.setTextColor(50, 50, 50);
+          const lines = doc.splitTextToSize(`${i + 1}. ${item}`, cW - 6);
+          doc.text(lines, margin + 4, getY()); setDocY(getY() + lines.length * 4 + 3);
+        });
+        setDocY(getY() + 3);
+      });
+      setDocY(getY() + 5);
+    });
+
+    addSection("Next Steps");
+    checkPage(30);
+    doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
+    [`${participant.name} is encouraged to share this development plan with their line manager within the next two weeks and to agree on which activities to prioritise in the first 90 days.`, "The recommended approach is to begin with one activity from each of the three 70-20-10 categories for each assessed competency, and to review progress monthly in a structured one-to-one conversation.", "CCM Consultancy recommends a formal follow-up review at 90 days to assess progress and adjust the plan as needed."].forEach(ns => {
+      const lines = doc.splitTextToSize(ns, cW);
+      doc.text(lines, margin, getY()); setDocY(getY() + lines.length * 5 + 4);
+    });
+  }
+
+  checkPage(15);
+  setDocY(getY() + 10);
+  doc.setFontSize(8); doc.setFont("helvetica", "italic"); doc.setTextColor(150, 150, 150);
+  doc.text("Prepared by CCM Consultancy. This report is intended solely for the named participant.", margin, getY());
+  doc.save(`CCM_Development_Report_${participant.name.replace(/\s/g, "_")}.pdf`);
+}
