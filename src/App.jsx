@@ -626,12 +626,25 @@ const [editCompSaving, setEditCompSaving] = useState(false);
 
   // ─── Questions & Guide handlers ───────────────────────────────────────────────
   async function loadQgCs(csId) {
-    async function loadLibComps() {
+  setQgCsId(csId); setQgModuleId(""); setQFormOpen(false); setGuideOpen(null);
+  setQForm({ ...emptyQForm }); closeAiPanel();
+  if (!csId) { setQgData(null); return; }
+  setQgLoading(true);
+  try { setQgData(await db.getFullCaseStudy(csId)); }
+  catch(e) { notify(`Failed to load: ${e.message}`); }
+  setQgLoading(false);
+}
+
+async function loadLibComps() {
   setLibLoading(true);
   try { setLibComps(await db.getLibraryCompetencies()); }
   catch(e) { notify(`Failed to load competencies: ${e.message}`); }
   setLibLoading(false);
 }
+
+useEffect(() => {
+  if (screen === "admin") loadLibComps();
+}, [screen]);
 
 async function generateAndAddCompetency() {
   if (!newCompForm.name.trim()) { notify("Enter a competency name first."); return; }
