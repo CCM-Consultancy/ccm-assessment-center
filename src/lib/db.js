@@ -1,5 +1,6 @@
 const SB_URL    = "https://xczfixvzgpcodjzofeqq.supabase.co";
 const SB_KEY    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhjemZpeHZ6Z3Bjb2Rqem9mZXFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwMzQyMTQsImV4cCI6MjA5MzYxMDIxNH0.0GkWMaK6XuXNmYl6-gesBglhCv9wJbOBIVIcvNLqnkI";
+
 // ─── AI Question Suggestions ───────────────────────────────────────────────────
 
 export async function suggestQuestions(caseName, compName) {
@@ -8,15 +9,46 @@ export async function suggestQuestions(caseName, compName) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ caseStudyName: caseName, competencyName: compName }),
   });
-
   if (!res.ok) {
     let msg = `Suggestion service error ${res.status}`;
     try { msg = (await res.json()).error || msg; } catch {}
     throw new Error(msg);
   }
-
   const { suggestions } = await res.json();
   return suggestions;
+}
+
+// ─── AI Competency Definition ──────────────────────────────────────────────────
+
+export async function generateCompetencyDefinition(compName) {
+  const res = await fetch("/.netlify/functions/generate-competency", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ competencyName: compName }),
+  });
+  if (!res.ok) {
+    let msg = `Definition service error ${res.status}`;
+    try { msg = (await res.json()).error || msg; } catch {}
+    throw new Error(msg);
+  }
+  const { definition, observed_in } = await res.json();
+  return { definition, observed_in };
+}
+
+// ─── AI Assessor Guide Generation ─────────────────────────────────────────────
+
+export async function generateAssessorGuide(caseName, compName, questions) {
+  const res = await fetch("/.netlify/functions/generate-guide", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ caseStudyName: caseName, competencyName: compName, questions }),
+  });
+  if (!res.ok) {
+    let msg = `Guide service error ${res.status}`;
+    try { msg = (await res.json()).error || msg; } catch {}
+    throw new Error(msg);
+  }
+  return await res.json();
 }
 
 async function q(table, method = "GET", body = null, query = "") {
@@ -43,9 +75,9 @@ async function q(table, method = "GET", body = null, query = "") {
   return parsed;
 }
 
-const arr   = (res) => Array.isArray(res) ? res : [];
-const first = (res) => (Array.isArray(res) ? res[0] : res) || null;
-const now   = () => new Date().toISOString();
+const arr    = (res) => Array.isArray(res) ? res : [];
+const first  = (res) => (Array.isArray(res) ? res[0] : res) || null;
+const now    = () => new Date().toISOString();
 const inList = (ids) => `(${ids.join(",")})`;
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
@@ -61,7 +93,61 @@ export async function saveSetting(key, value) {
   return q("ac_settings", "POST", { key, value, updated_at: now() });
 }
 
-// ─── Case Studies ──────────────────────────────────────────────────────────────
+// ─── Global Competency Library ────────────────────────────────────────────────
+
+export async function getLibraryCompetencies() {
+  return arr(await q("ccm_competencies", "GET", null, "?select=*&order=category.asc,name.asc"));
+}
+
+export async function saveLibraryCompetency(data) {
+  return first(await q("ccm_competencies", "POST", { created_at: now(), ...data }));
+}
+
+export async function deleteLibraryCompetency(id) {
+  await q("ccm_competencies", "DELETE", null, `?id=eq.${id}`);
+}
+
+// ─── Case Study Competency Assignments ────────────────────────────────────────
+
+export async function getAssignedCompetencies(caseStudyId) {
+  const assignments = arr(await q("cs_competency_assignments", "GET", null,
+    `?case_study_id=eq.${caseStudyId}&select=*&order=display_order.asc`));
+  if (!assignments.length) return [];
+  const ids = assignments.map(a => a.competency_id);
+  const comps = arr(await q("ccm_competencies", "GET", null,
+    `?id=in.(${ids.join(",")})&select=*`));
+  return assignments.map(a => ({
+    ...a,
+    competency: comps.find(c => c.id === a.competency_id) || null,
+  }));
+}
+
+export async function assignCompetency(caseStudyId, competencyId, displayOrder) {
+  return first(await q("cs_competency_assignments", "POST", {
+    case_study_id: caseStudyId,
+    competency_id: competencyId,
+    display_order: displayOrder,
+    created_at: now(),
+  }));
+}
+
+export async function unassignCompetency(caseStudyId, competencyId) {
+  await q("cs_competency_assignments", "DELETE", null,
+    `?case_study_id=eq.${caseStudyId}&competency_id=eq.${competencyId}`);
+}
+
+// ─── Assessor Guides (per competency) ────────────────────────────────────────
+
+export async function getCompetencyGuide(caseStudyId, competencyId) {
+  return first(await q("cs_competency_guides", "GET", null,
+    `?case_study_id=eq.${caseStudyId}&competency_id=eq.${competencyId}&select=*`));
+}
+
+export async function saveCompetencyGuide(data) {
+  return first(await q("cs_competency_guides", "POST", { ...data, updated_at: now() }));
+}
+
+// ─── Case Studies ─────────────────────────────────────────────────────────────
 
 export async function getCaseStudies() {
   return arr(await q("case_studies", "GET", null, "?select=*&order=created_at.asc"));
@@ -131,7 +217,7 @@ export async function getFullCaseStudy(id) {
   };
 }
 
-// ─── Levels ────────────────────────────────────────────────────────────────────
+// ─── Levels ───────────────────────────────────────────────────────────────────
 
 export async function saveLevel(data) {
   return first(await q("cs_levels", "POST", data));
@@ -145,7 +231,7 @@ export async function getAllLevels() {
   return arr(await q("cs_levels", "GET", null, "?select=*"));
 }
 
-// ─── Competencies ──────────────────────────────────────────────────────────────
+// ─── Competencies (case-study level — legacy) ─────────────────────────────────
 
 export async function saveCompetency(data) {
   return first(await q("cs_competencies", "POST", { created_at: now(), ...data }));
@@ -155,7 +241,7 @@ export async function deleteCompetency(id) {
   await q("cs_competencies", "DELETE", null, `?id=eq.${id}`);
 }
 
-// ─── Modules ───────────────────────────────────────────────────────────────────
+// ─── Modules ──────────────────────────────────────────────────────────────────
 
 export async function saveModule(data) {
   return first(await q("cs_modules", "POST", { created_at: now(), ...data }));
@@ -191,13 +277,13 @@ export async function saveRolePlay(data) {
   return first(await q("cs_role_plays", "POST", data));
 }
 
-// ─── Development Activities ────────────────────────────────────────────────────
+// ─── Development Activities ───────────────────────────────────────────────────
 
 export async function saveDevActivities(data) {
   return first(await q("cs_development_activities", "POST", { ...data, updated_at: now() }));
 }
 
-// ─── Question Bank ─────────────────────────────────────────────────────────────
+// ─── Question Bank ────────────────────────────────────────────────────────────
 
 export async function saveQuestionBankItem(data) {
   return first(await q("cs_question_bank", "POST", { created_at: now(), ...data }));
@@ -207,10 +293,11 @@ export async function deleteQuestionBankItem(id) {
   await q("cs_question_bank", "DELETE", null, `?id=eq.${id}`);
 }
 
-// ─── Cohorts ───────────────────────────────────────────────────────────────────
+// ─── Cohorts ──────────────────────────────────────────────────────────────────
 
 export async function getCohortByAccessCode(code) {
-  return first(await q("cohorts", "GET", null, `?access_code=eq.${encodeURIComponent(code)}&is_active=eq.true&select=*`));
+  return first(await q("cohorts", "GET", null,
+    `?access_code=eq.${encodeURIComponent(code)}&is_active=eq.true&select=*`));
 }
 
 export async function getCohorts() {
@@ -225,7 +312,7 @@ export async function deleteCohort(id) {
   await q("cohorts", "DELETE", null, `?id=eq.${id}`);
 }
 
-// ─── Participants ──────────────────────────────────────────────────────────────
+// ─── Participants ─────────────────────────────────────────────────────────────
 
 export async function getParticipants() {
   return arr(await q("ac_participants", "GET", null, "?select=*&order=created_at.asc"));
@@ -236,7 +323,6 @@ export async function saveParticipant(data) {
 }
 
 export async function updateParticipant(id, fields) {
-  // PATCH only the supplied fields — never touches password or other omitted columns
   return first(await q("ac_participants", "PATCH", fields, `?id=eq.${id}`));
 }
 
@@ -259,12 +345,10 @@ export async function loginParticipant(username, password) {
   return { ...p, level, cohort };
 }
 
-// ─── Storage ───────────────────────────────────────────────────────────────────
+// ─── Storage ──────────────────────────────────────────────────────────────────
 
 export async function uploadStorageFile(bucket, path, file) {
-  // file.type is empty for xlsx/xls — always supply a fallback so the header is never blank
   const mime = file.type || guessMime(file.name);
-
   const res = await fetch(`${SB_URL}/storage/v1/object/${bucket}/${path}`, {
     method: "POST",
     headers: {
@@ -276,7 +360,6 @@ export async function uploadStorageFile(bucket, path, file) {
     },
     body: file,
   });
-
   const text = await res.text();
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
@@ -300,7 +383,7 @@ function guessMime(filename) {
   return map[ext] || "application/octet-stream";
 }
 
-// ─── Participant Session (loads full case study for participant) ────────────────
+// ─── Participant Session ───────────────────────────────────────────────────────
 
 export async function loadParticipantSession(p) {
   const csId = p.cohort.case_study_id;
@@ -311,10 +394,10 @@ export async function loadParticipantSession(p) {
     q("cs_module_levels","GET", null, `?level_id=eq.${p.level_id}&select=module_id`),
   ]);
 
-  const allowedIds  = new Set((mlForLevel || []).map(ml => ml.module_id));
-  const accessible  = (allModules || []).filter(m => allowedIds.has(m.id));
-  const caseStudy   = (cs || [])[0] || null;
-  const comps       = competencies || [];
+  const allowedIds = new Set((mlForLevel || []).map(ml => ml.module_id));
+  const accessible = (allModules || []).filter(m => allowedIds.has(m.id));
+  const caseStudy  = (cs || [])[0] || null;
+  const comps      = competencies || [];
 
   if (!accessible.length) {
     return { participant: p, level: p.level, cohort: p.cohort, caseStudy, competencies: comps, modules: [] };
@@ -324,7 +407,7 @@ export async function loadParticipantSession(p) {
   const tier = p.level.complexity_tier;
 
   const [scenarios, questions, rolePlays] = await Promise.all([
-    q("cs_scenarios",  "GET", null, `?module_id=in.${mf}&select=*`),          // one row per module, no tier split
+    q("cs_scenarios",  "GET", null, `?module_id=in.${mf}&select=*`),
     q("cs_questions",  "GET", null, `?module_id=in.${mf}&select=*&order=display_order.asc`),
     q("cs_role_plays", "GET", null, `?module_id=in.${mf}&select=*`),
   ]);
@@ -338,9 +421,9 @@ export async function loadParticipantSession(p) {
     const compIds = [...new Set(qs.map(x => x.competency_id))];
     return {
       ...mod,
-      scenario:          (scenarios  || []).find(s  => s.module_id  === mod.id) || null,
-      questions:         qs,
-      rolePlay:          (rolePlays  || []).find(rp => rp.module_id === mod.id) || null,
+      scenario:           (scenarios || []).find(s  => s.module_id  === mod.id) || null,
+      questions:          qs,
+      rolePlay:           (rolePlays || []).find(rp => rp.module_id === mod.id) || null,
       moduleCompetencies: compIds.map(id => compMap[id]).filter(Boolean),
     };
   });
@@ -348,14 +431,14 @@ export async function loadParticipantSession(p) {
   return { participant: p, level: p.level, cohort: p.cohort, caseStudy, competencies: comps, modules: enriched };
 }
 
-// ─── Assessment Data ───────────────────────────────────────────────────────────
+// ─── Assessment Data ──────────────────────────────────────────────────────────
 
 export async function loadAllAssessmentData() {
   const [results, ratings, requests, promos] = await Promise.all([
-    q("ac_results",          "GET", null, "?select=*"),
-    q("ac_ratings",          "GET", null, "?select=*"),
-    q("ac_report_requests",  "GET", null, "?select=*"),
-    q("ac_promotion_recs",   "GET", null, "?select=*"),
+    q("ac_results",         "GET", null, "?select=*"),
+    q("ac_ratings",         "GET", null, "?select=*"),
+    q("ac_report_requests", "GET", null, "?select=*"),
+    q("ac_promotion_recs",  "GET", null, "?select=*"),
   ]);
   return {
     results:  results  || [],
