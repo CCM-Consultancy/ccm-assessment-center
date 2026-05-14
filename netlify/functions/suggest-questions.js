@@ -46,7 +46,7 @@ Competency being assessed: "${competencyName}"
 
 Return ONLY a valid JSON array with no other text, markdown, or explanation. Each element must have:
 - "advanced": full, nuanced version for senior/experienced candidates
-- "standard": simpler, more direct version for developing candidates
+- "standard": a simpler, more direct version that still references a specific situation or decision from the "${caseStudyName}" case study — not generic
 
 [{"advanced":"...","standard":"..."},...]`;
 
