@@ -123,7 +123,9 @@ export default function App() {
   const [guideForm,   setGuideForm]   = useState({ ...emptyGuide });
   const [guideSaving, setGuideSaving] = useState(false);
   // AI question suggestions
+  const [aiPanelOpen,   setAiPanelOpen]   = useState(false); // controlled separately from load state
   const [aiSuggestions, setAiSuggestions] = useState([]); // [{advanced, standard}]
+  const [aiError,       setAiError]       = useState(null);
   const [aiLoading,     setAiLoading]     = useState(false);
   const [aiSelected,    setAiSelected]    = useState(new Set());
   const [aiAdding,      setAiAdding]      = useState(false);
@@ -613,7 +615,7 @@ export default function App() {
   // ─── Questions & Guide handlers ───────────────────────────────────────────────
   async function loadQgCs(csId) {
     setQgCsId(csId); setQgModuleId(""); setQFormOpen(false); setGuideOpen(null);
-    setQForm({ ...emptyQForm });
+    setQForm({ ...emptyQForm }); closeAiPanel();
     if (!csId) { setQgData(null); return; }
     setQgLoading(true);
     try { setQgData(await db.getFullCaseStudy(csId)); }
@@ -679,16 +681,27 @@ export default function App() {
   }
 
   async function fetchAiSuggestions(compId) {
-    setAiSuggestions([]); setAiSelected(new Set());
-    if (!compId) return;
+    // Reset content but leave panel open — caller is responsible for opening it
+    setAiSuggestions([]); setAiSelected(new Set()); setAiError(null); setAiLoading(true);
+    if (!compId) { setAiLoading(false); return; }
     const csName   = qgData?.caseStudy?.name || "the case study";
     const compName = (qgData?.competencies || []).find(c => c.id === compId)?.name || compId;
-    setAiLoading(true);
     try {
       const suggestions = await db.suggestQuestions(csName, compName);
       setAiSuggestions(Array.isArray(suggestions) ? suggestions.slice(0, 5) : []);
-    } catch(e) { notify(`AI suggestion failed: ${e.message}`); }
+    } catch(e) {
+      setAiError(e.message || "Could not load suggestions — try again.");
+    }
     setAiLoading(false);
+  }
+
+  function openAiPanel(compId) {
+    setAiPanelOpen(true); // open synchronously so the panel is guaranteed visible
+    fetchAiSuggestions(compId);
+  }
+
+  function closeAiPanel() {
+    setAiPanelOpen(false); setAiSuggestions([]); setAiSelected(new Set()); setAiError(null); setAiLoading(false);
   }
 
   async function addSelectedSuggestions() {
@@ -707,7 +720,7 @@ export default function App() {
         });
       }
       await reloadQgData();
-      setAiSuggestions([]); setAiSelected(new Set());
+      closeAiPanel();
       setQFormOpen(false); setQForm({ ...emptyQForm });
       notify(`${chosen.length} question${chosen.length !== 1 ? "s" : ""} added.`);
     } catch(e) { notify(`Add failed: ${e.message}`); }
@@ -1165,7 +1178,7 @@ export default function App() {
                 {qgCsId && (
                   <div>
                     <label style={S.label}>Module</label>
-                    <select style={{ ...S.input, width:280 }} value={qgModuleId} onChange={e => { setQgModuleId(e.target.value); setQFormOpen(false); setGuideOpen(null); setQForm({ ...emptyQForm }); }}>
+                    <select style={{ ...S.input, width:280 }} value={qgModuleId} onChange={e => { setQgModuleId(e.target.value); setQFormOpen(false); setGuideOpen(null); setQForm({ ...emptyQForm }); closeAiPanel(); }}>
                       <option value="">Select module…</option>
                       {qgModules.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
                     </select>
@@ -1245,7 +1258,7 @@ export default function App() {
                                 onChange={e => {
                                   const id = e.target.value;
                                   setQForm(f => ({ ...f, competency_id:id }));
-                                  if (!qForm.id) fetchAiSuggestions(id); // only auto-suggest on new questions
+                                  if (!qForm.id) openAiPanel(id); // open synchronously, fetch async
                                 }}
                               >
                                 <option value="">Select competency…</option>
@@ -1263,22 +1276,28 @@ export default function App() {
                           </div>
 
                           {/* ── AI Suggestions panel ─────────────────────── */}
-                          {(aiLoading || aiSuggestions.length > 0) && !qForm.id && (
+                          {aiPanelOpen && (
                             <div style={{ margin:"14px 0", padding:"14px 16px", background:"#f8f7ff", border:"1px solid #e9d5ff", borderRadius:10 }}>
                               <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
                                 <span style={{ fontSize:13, fontWeight:600, color:"#6d28d9" }}>✨ AI Question Suggestions</span>
                                 {aiLoading && <span style={{ fontSize:12, color:"#9c60d0" }}>Generating…</span>}
-                                {!aiLoading && aiSuggestions.length > 0 && (
+                                {!aiLoading && qForm.competency_id && (
                                   <button
                                     onClick={() => fetchAiSuggestions(qForm.competency_id)}
                                     style={S.btn("#fff","#7e22ce",{ fontSize:11, padding:"3px 10px", border:"1px solid #c4b5fd" })}
-                                  >↻ Regenerate</button>
+                                  >↻ {aiError ? "Retry" : "Regenerate"}</button>
                                 )}
                               </div>
 
                               {aiLoading && (
                                 <div style={{ fontSize:12, color:"#9c60d0", padding:"8px 0" }}>
                                   Asking Claude for questions about <em>{(qgCompetencies.find(c=>c.id===qForm.competency_id)||{}).name}</em>…
+                                </div>
+                              )}
+
+                              {!aiLoading && aiError && (
+                                <div style={{ fontSize:12, color:"#b91c1c", background:"#fff1f2", border:"1px solid #fecdd3", borderRadius:6, padding:"8px 12px", marginBottom:8 }}>
+                                  {aiError}
                                 </div>
                               )}
 
@@ -1307,8 +1326,8 @@ export default function App() {
                                 </label>
                               ))}
 
-                              {!aiLoading && aiSuggestions.length > 0 && (
-                                <div style={{ display:"flex", gap:8, marginTop:10 }}>
+                              <div style={{ display:"flex", gap:8, marginTop:10 }}>
+                                {!aiLoading && aiSuggestions.length > 0 && (
                                   <button
                                     onClick={addSelectedSuggestions}
                                     disabled={aiAdding || aiSelected.size === 0}
@@ -1316,9 +1335,12 @@ export default function App() {
                                   >
                                     {aiAdding ? "Adding…" : `Add Selected (${aiSelected.size})`}
                                   </button>
-                                  <button onClick={() => { setAiSuggestions([]); setAiSelected(new Set()); }} style={S.btn("#fff","#888",{ fontSize:12, border:"1px solid #ddd" })}>Dismiss</button>
-                                </div>
-                              )}
+                                )}
+                                <button
+                                  onClick={closeAiPanel}
+                                  style={S.btn("#fff","#888",{ fontSize:12, border:"1px solid #ddd" })}
+                                >Dismiss</button>
+                              </div>
                             </div>
                           )}
 
@@ -1326,7 +1348,7 @@ export default function App() {
                             <button onClick={saveQgQuestion} disabled={qSaving} style={S.btn(CCM_RED,"#fff",{ opacity:qSaving?0.6:1 })}>
                               {qSaving ? "Saving…" : qForm.id ? "Update Question" : "Save Question"}
                             </button>
-                            <button onClick={() => { setQFormOpen(false); setQForm({ ...emptyQForm }); setAiSuggestions([]); setAiSelected(new Set()); }} style={S.btn("#fff","#666",{ border:"1px solid #ddd" })}>Cancel</button>
+                            <button onClick={() => { setQFormOpen(false); setQForm({ ...emptyQForm }); closeAiPanel(); }} style={S.btn("#fff","#666",{ border:"1px solid #ddd" })}>Cancel</button>
                           </div>
                         </div>
                       )}
@@ -1352,7 +1374,7 @@ export default function App() {
                             {/* Question header */}
                             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
                               <span style={{ fontSize:11, fontWeight:700, background:"#f0f0f0", color:"#555", padding:"3px 9px", borderRadius:20, minWidth:28, textAlign:"center" }}>
-                                Q{question.display_order + 1}
+                                Q{idx + 1}
                               </span>
                               {comp && (
                                 <span style={{ fontSize:11, background:"#faf5ff", color:"#7e22ce", border:"1px solid #e9d5ff", padding:"2px 9px", borderRadius:20 }}>
@@ -1362,6 +1384,7 @@ export default function App() {
                               <div style={{ flex:1 }} />
                               <button
                                 onClick={() => {
+                                  closeAiPanel();
                                   setQForm({ id:question.id, text_advanced:question.text_advanced||"", text_standard:question.text_standard||"", competency_id:question.competency_id||"", display_order:question.display_order||0 });
                                   setQFormOpen(true); setGuideOpen(null);
                                   window.scrollTo({ top:0, behavior:"smooth" });
