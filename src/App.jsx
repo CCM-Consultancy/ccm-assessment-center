@@ -688,14 +688,7 @@ async function deleteLibComp(id) {
     notify("Competency deleted.");
   } catch(e) { notify(`Delete failed: ${e.message}`); }
 }
-    setQgCsId(csId); setQgModuleId(""); setQFormOpen(false); setGuideOpen(null);
-    setQForm({ ...emptyQForm }); closeAiPanel();
-    if (!csId) { setQgData(null); return; }
-    setQgLoading(true);
-    try { setQgData(await db.getFullCaseStudy(csId)); }
-    catch(e) { notify(`Failed to load: ${e.message}`); }
-    setQgLoading(false);
-  }
+    
 
   async function reloadQgData() {
     if (!qgCsId) return;
