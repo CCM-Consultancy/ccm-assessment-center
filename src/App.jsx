@@ -58,6 +58,9 @@ function KeywordEditor({ keywords, onChange }) {
 
 // ─── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
+  useEffect(() => {
+  if (screen === "admin") loadLibComps();
+}, [screen]);
   const [screen, setScreen]         = useState("login");
   const [role,   setRole]           = useState(null);       // "admin" | "participant"
   const [session, setSession]       = useState(null);       // loaded participant session
@@ -98,6 +101,17 @@ export default function App() {
   const [mbModuleLevels, setMbModuleLevels] = useState([]);
   const [mbScenarios,    setMbScenarios]    = useState([]);
   const [mbSelModId,     setMbSelModId]     = useState(null);
+  const [libComps,       setLibComps]       = useState([]);
+const [libLoading,     setLibLoading]     = useState(false);
+const [libFilter,      setLibFilter]      = useState("All");
+const [libSearch,      setLibSearch]      = useState("");
+const [addCompOpen,    setAddCompOpen]    = useState(false);
+const [newCompForm,    setNewCompForm]    = useState({ name:"", category:"Leadership" });
+const [newCompGen,     setNewCompGen]     = useState(false);
+const [newCompSaving,  setNewCompSaving]  = useState(false);
+const [editCompId,     setEditCompId]     = useState(null);
+const [editCompForm,   setEditCompForm]   = useState({ name:"", category:"", definition:"", observed_in:"" });
+const [editCompSaving, setEditCompSaving] = useState(false);
   const [mbModForm,      setMbModForm]      = useState({ name:"" });
   const emptyScenForm = { case_study_text:"", appendix_text:"", image_1_url:"", image_1_caption:"", image_2_url:"", image_2_caption:"", image_3_url:"", image_3_caption:"", file_url:"", file_name:"", file_type:"" };
   const [mbScenForm,     setMbScenForm]     = useState({ ...emptyScenForm });
@@ -614,6 +628,55 @@ export default function App() {
 
   // ─── Questions & Guide handlers ───────────────────────────────────────────────
   async function loadQgCs(csId) {
+    async function loadLibComps() {
+  setLibLoading(true);
+  try { setLibComps(await db.getLibraryCompetencies()); }
+  catch(e) { notify(`Failed to load competencies: ${e.message}`); }
+  setLibLoading(false);
+}
+
+async function generateAndAddCompetency() {
+  if (!newCompForm.name.trim()) { notify("Enter a competency name first."); return; }
+  setNewCompGen(true);
+  try {
+    const { definition, observed_in } = await db.generateCompetencyDefinition(newCompForm.name.trim());
+    setNewCompSaving(true);
+    await db.saveLibraryCompetency({
+      name:       newCompForm.name.trim(),
+      category:   newCompForm.category,
+      definition,
+      observed_in,
+      is_default: false,
+    });
+    await loadLibComps();
+    setAddCompOpen(false);
+    setNewCompForm({ name:"", category:"Leadership" });
+    notify("✓ Competency added.");
+  } catch(e) { notify(`Failed: ${e.message}`); }
+  setNewCompGen(false);
+  setNewCompSaving(false);
+}
+
+async function saveEditComp() {
+  if (!editCompForm.name.trim() || !editCompForm.definition.trim()) { notify("Name and definition required."); return; }
+  setEditCompSaving(true);
+  try {
+    await db.saveLibraryCompetency({ id: editCompId, ...editCompForm });
+    await loadLibComps();
+    setEditCompId(null);
+    notify("✓ Competency updated.");
+  } catch(e) { notify(`Failed: ${e.message}`); }
+  setEditCompSaving(false);
+}
+
+async function deleteLibComp(id) {
+  if (!window.confirm("Delete this competency from the library? This cannot be undone.")) return;
+  try {
+    await db.deleteLibraryCompetency(id);
+    await loadLibComps();
+    notify("Competency deleted.");
+  } catch(e) { notify(`Delete failed: ${e.message}`); }
+}
     setQgCsId(csId); setQgModuleId(""); setQFormOpen(false); setGuideOpen(null);
     setQForm({ ...emptyQForm }); closeAiPanel();
     if (!csId) { setQgData(null); return; }
@@ -832,6 +895,7 @@ export default function App() {
 
   const TABS = [
     { id:"case-studies",    label:"Case Studies" },
+    { id:"competencies", label:"Competencies" },
     { id:"module-builder",  label:"Module Builder" },
     { id:"questions-guide", label:"Questions & Guide" },
     { id:"cohorts",         label:"Cohorts" },
@@ -1711,6 +1775,171 @@ export default function App() {
             })()}
           </div>
         )}
+        {adminTab==="competencies" && (() => {
+  const CATEGORIES = ["All","Leadership","Cognitive","Interpersonal","Personal Effectiveness","Functional & Executive"];
+  const filtered = libComps.filter(c => {
+    const matchCat = libFilter === "All" || c.category === libFilter;
+    const matchSearch = !libSearch || c.name.toLowerCase().includes(libSearch.toLowerCase());
+    return matchCat && matchSearch;
+  });
+  const grouped = CATEGORIES.slice(1).reduce((acc, cat) => {
+    const items = filtered.filter(c => c.category === cat);
+    if (items.length) acc[cat] = items;
+    return acc;
+  }, {});
+
+  const catColor = {
+    "Leadership":             { bg:"#eff6ff", color:"#1d4ed8", border:"#bfdbfe" },
+    "Cognitive":              { bg:"#f0fdf4", color:"#15803d", border:"#bbf7d0" },
+    "Interpersonal":          { bg:"#fdf4ff", color:"#7e22ce", border:"#e9d5ff" },
+    "Personal Effectiveness": { bg:"#fff7ed", color:"#c2410c", border:"#fed7aa" },
+    "Functional & Executive": { bg:"#fef2f2", color:"#b91c1c", border:"#fecaca" },
+  };
+
+  return (
+    <div style={{ maxWidth:960, margin:"0 auto", padding:"1.5rem" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1.25rem" }}>
+        <div>
+          <h2 style={{ margin:0, fontSize:18, fontWeight:700 }}>Competency Library</h2>
+          <p style={{ margin:"4px 0 0", fontSize:13, color:"#888" }}>
+            {libComps.length} competencies · Global library reused across all case studies
+          </p>
+        </div>
+        <button onClick={() => setAddCompOpen(v => !v)} style={S.btn(CCM_RED,"#fff",{ fontSize:13 })}>+ Add Competency</button>
+      </div>
+
+      {addCompOpen && (
+        <div style={{ ...S.card, marginBottom:"1.5rem", borderLeft:`3px solid ${CCM_RED}` }}>
+          <h3 style={{ margin:"0 0 1rem", fontSize:15 }}>Add New Competency</h3>
+          <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:14 }}>
+            Type the competency name, select a category, and click Generate — Claude will write the definition automatically.
+          </p>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 200px", gap:12, marginBottom:14 }}>
+            <div>
+              <label style={S.label}>Competency Name *</label>
+              <input style={S.input} value={newCompForm.name} onChange={e => setNewCompForm(f => ({ ...f, name:e.target.value }))} placeholder="e.g. Emotional Intelligence" />
+            </div>
+            <div>
+              <label style={S.label}>Category *</label>
+              <select style={S.input} value={newCompForm.category} onChange={e => setNewCompForm(f => ({ ...f, category:e.target.value }))}>
+                <option>Leadership</option>
+                <option>Cognitive</option>
+                <option>Interpersonal</option>
+                <option>Personal Effectiveness</option>
+                <option>Functional & Executive</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={generateAndAddCompetency} disabled={newCompGen||newCompSaving} style={S.btn(CCM_RED,"#fff",{ opacity:(newCompGen||newCompSaving)?0.6:1 })}>
+              {newCompGen ? "✨ Generating…" : newCompSaving ? "Saving…" : "✨ Generate & Add"}
+            </button>
+            <button onClick={() => { setAddCompOpen(false); setNewCompForm({ name:"", category:"Leadership" }); }} style={S.btn("#fff","#666",{ border:"1px solid #ddd" })}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display:"flex", gap:10, marginBottom:"1.25rem", alignItems:"center" }}>
+        <input style={{ ...S.input, width:260, fontSize:13 }} placeholder="Search competencies…" value={libSearch} onChange={e => setLibSearch(e.target.value)} />
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+          {CATEGORIES.map(cat => (
+            <button key={cat} onClick={() => setLibFilter(cat)} style={{
+              fontSize:11, padding:"4px 12px", borderRadius:20, cursor:"pointer", fontWeight: libFilter===cat ? 600 : 400,
+              background: libFilter===cat ? "#111" : "#f5f5f5",
+              color:      libFilter===cat ? "#fff" : "#555",
+              border:     libFilter===cat ? "1px solid #111" : "1px solid #ddd",
+            }}>{cat}</button>
+          ))}
+        </div>
+      </div>
+
+      {libLoading && <p style={{ fontSize:13, color:"#aaa" }}>Loading…</p>}
+
+      {!libLoading && Object.entries(grouped).map(([cat, items]) => {
+        const colors = catColor[cat] || { bg:"#f5f5f5", color:"#333", border:"#ddd" };
+        return (
+          <div key={cat} style={{ marginBottom:"1.5rem" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+              <span style={{ fontSize:11, fontWeight:700, padding:"3px 12px", borderRadius:20, background:colors.bg, color:colors.color, border:`1px solid ${colors.border}`, textTransform:"uppercase", letterSpacing:"0.06em" }}>
+                {cat}
+              </span>
+              <span style={{ fontSize:12, color:"#aaa" }}>{items.length} competencies</span>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              {items.map(comp => {
+                const isEditing = editCompId === comp.id;
+                return (
+                  <div key={comp.id} style={{ ...S.card, padding:"14px 16px" }}>
+                    {isEditing ? (
+                      <div>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 200px", gap:12, marginBottom:10 }}>
+                          <div>
+                            <label style={S.label}>Name</label>
+                            <input style={S.input} value={editCompForm.name} onChange={e => setEditCompForm(f => ({ ...f, name:e.target.value }))} />
+                          </div>
+                          <div>
+                            <label style={S.label}>Category</label>
+                            <select style={S.input} value={editCompForm.category} onChange={e => setEditCompForm(f => ({ ...f, category:e.target.value }))}>
+                              <option>Leadership</option>
+                              <option>Cognitive</option>
+                              <option>Interpersonal</option>
+                              <option>Personal Effectiveness</option>
+                              <option>Functional & Executive</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div style={{ marginBottom:10 }}>
+                          <label style={S.label}>Definition</label>
+                          <textarea style={{ ...S.textarea, height:80 }} value={editCompForm.definition} onChange={e => setEditCompForm(f => ({ ...f, definition:e.target.value }))} />
+                        </div>
+                        <div style={{ marginBottom:12 }}>
+                          <label style={S.label}>Observed In</label>
+                          <input style={S.input} value={editCompForm.observed_in} onChange={e => setEditCompForm(f => ({ ...f, observed_in:e.target.value }))} />
+                        </div>
+                        <div style={{ display:"flex", gap:8 }}>
+                          <button onClick={saveEditComp} disabled={editCompSaving} style={S.btn(CCM_RED,"#fff",{ opacity:editCompSaving?0.6:1 })}>{editCompSaving?"Saving…":"Save"}</button>
+                          <button onClick={() => setEditCompId(null)} style={S.btn("#fff","#666",{ border:"1px solid #ddd" })}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
+                        <div style={{ flex:1 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                            <span style={{ fontWeight:700, fontSize:14 }}>{comp.name}</span>
+                            {!comp.is_default && (
+                              <span style={{ fontSize:10, padding:"2px 8px", borderRadius:20, background:"#fff7ed", color:"#c2410c", border:"1px solid #fed7aa" }}>Custom</span>
+                            )}
+                          </div>
+                          <p style={{ fontSize:13, color:"#444", margin:"0 0 6px", lineHeight:1.55 }}>{comp.definition}</p>
+                          {comp.observed_in && (
+                            <p style={{ fontSize:11, color:"#888", margin:0 }}>
+                              <span style={{ fontWeight:600 }}>Observed in: </span>{comp.observed_in}
+                            </p>
+                          )}
+                        </div>
+                        <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                          <button onClick={() => { setEditCompId(comp.id); setEditCompForm({ name:comp.name, category:comp.category, definition:comp.definition, observed_in:comp.observed_in||"" }); }} style={S.btn("#fff","#333",{ fontSize:11, padding:"4px 10px", border:"1px solid #ddd" })}>Edit</button>
+                          <button onClick={() => deleteLibComp(comp.id)} style={S.btn("#fff","#dc2626",{ fontSize:11, padding:"4px 10px", border:"1px solid #fca5a5" })}>Delete</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      {!libLoading && filtered.length === 0 && (
+        <div style={{ ...S.card, textAlign:"center", color:"#aaa", padding:"3rem" }}>
+          <div style={{ fontSize:32, marginBottom:8 }}>🔍</div>
+          <div style={{ fontSize:14 }}>No competencies found.</div>
+        </div>
+      )}
+    </div>
+  );
+})()}
         {adminTab==="dashboard"       && <Placeholder title="Dashboard"          description="Per-cohort completion grid showing all participants and modules." />}
         {adminTab==="assessor-guide"  && <Placeholder title="Assessor Guide"     description="Dynamic guide pulled from the active case study." />}
         {adminTab==="live-panel"      && <Placeholder title="Live Panel"         description="Real-time question bank for use during live interviews." />}
