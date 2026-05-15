@@ -3,6 +3,9 @@
   publish   = "build"
   functions = "netlify/functions"
 
+[functions]
+  timeout = 26
+
 [[redirects]]
   from   = "/*"
   to     = "/index.html"

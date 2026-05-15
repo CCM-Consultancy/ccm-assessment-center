@@ -926,6 +926,155 @@ async function deleteLibComp(id) {
     setAgLoading(false);
   }
 
+  // ─── PDF new-window renderer ─────────────────────────────────────────────────
+  function openPdfWindow(data) {
+    const { caseStudy, assignedComps, guides, questions } = data;
+    function esc(str) {
+      return (str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+    const scoreColors = [
+      { bg:"#f5f5f5", color:"#555",    border:"#ddd"    },
+      { bg:"#fef2f2", color:"#dc2626", border:"#fca5a5" },
+      { bg:"#fff7ed", color:"#ea580c", border:"#fdba74" },
+      { bg:"#fefce8", color:"#ca8a04", border:"#fde047" },
+      { bg:"#f0fdf4", color:"#16a34a", border:"#bbf7d0" },
+      { bg:"#eff6ff", color:"#0369a1", border:"#bfdbfe" },
+    ];
+
+    const compsHtml = assignedComps.map((assignment, idx) => {
+      const compId = assignment.competency_id;
+      const comp   = assignment.competency;
+      const guide  = guides[compId];
+      const compQs = (questions || []).filter(q => q.competency_id === compId);
+
+      let guideHtml = "";
+      if (guide) {
+        if (guide.definition) {
+          guideHtml += `<div class="def-box"><div class="def-label">Competency Definition</div><p>${esc(guide.definition)}</p></div>`;
+        }
+        if (Array.isArray(guide.score_descriptors) && guide.score_descriptors.length) {
+          const rows = guide.score_descriptors.map(sd => {
+            const c = scoreColors[sd.score] || scoreColors[0];
+            return `<div class="sd-row" style="background:${c.bg};border:1px solid ${c.border}">
+              <div class="sd-score" style="color:${c.color}">${sd.score}<span>${esc(sd.label)}</span></div>
+              <div class="sd-desc">${esc(sd.description)}</div>
+            </div>`;
+          }).join("");
+          guideHtml += `<div class="sec-title">Score Descriptors (0–5)</div><div class="sd-list">${rows}</div>`;
+        }
+        const toArr = v => Array.isArray(v) ? v : (typeof v === "string" ? v.split("\n").filter(Boolean) : []);
+        const si = toArr(guide.strong_indicators);
+        const wi = toArr(guide.weak_indicators);
+        if (si.length || wi.length) {
+          guideHtml += `<div class="indicators">
+            <div class="ind-col">
+              <div class="ind-title strong-t">Strong Behavioral Indicators</div>
+              <ul class="ind-list strong-l">${si.map(i=>`<li>${esc(i)}</li>`).join("")}</ul>
+            </div>
+            <div class="ind-col">
+              <div class="ind-title weak-t">Weak Behavioral Indicators</div>
+              <ul class="ind-list weak-l">${wi.map(i=>`<li>${esc(i)}</li>`).join("")}</ul>
+            </div>
+          </div>`;
+        }
+      } else {
+        guideHtml = `<p class="no-guide">No assessor guide generated for this competency yet.</p>`;
+      }
+
+      let questionsHtml = "";
+      if (compQs.length) {
+        const qItems = compQs.map((q, qi) => `
+          <div class="q-item">
+            <div class="q-num">Q${qi + 1}</div>
+            <div class="q-texts">
+              ${q.text_advanced ? `<div class="q-line"><span class="tier adv">advanced</span><span>${esc(q.text_advanced)}</span></div>` : ""}
+              ${q.text_standard ? `<div class="q-line"><span class="tier std">standard</span><span>${esc(q.text_standard)}</span></div>` : ""}
+            </div>
+          </div>`).join("");
+        questionsHtml = `<div class="sec-title q-title">Questions (${compQs.length})</div><div class="q-list">${qItems}</div>`;
+      }
+
+      return `<div class="comp-section">
+        <div class="comp-header">
+          <div class="comp-num">${idx + 1}</div>
+          <div>
+            <h2>${esc(comp?.name || compId)}</h2>
+            ${comp?.category ? `<span class="cat-badge">${esc(comp.category)}</span>` : ""}
+          </div>
+        </div>
+        ${guideHtml}
+        ${questionsHtml}
+      </div>`;
+    }).join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Assessor Guide — ${esc(caseStudy?.name || "")}</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:#fff;color:#111;font-size:13px;line-height:1.5;padding:28px 32px}
+.page-header{display:flex;align-items:flex-start;gap:18px;margin-bottom:28px;padding-bottom:18px;border-bottom:3px solid #E8251A}
+.logo-ccm{font-size:30px;font-weight:900;color:#E8251A;letter-spacing:-1px;line-height:1}
+.logo-sub{font-size:8px;letter-spacing:2.5px;color:#111;text-transform:uppercase;margin-top:2px}
+.cs-meta h1{font-size:20px;font-weight:700;margin-bottom:4px}
+.cs-meta p{font-size:12px;color:#666}
+.cs-meta .badge{font-size:11px;color:#888;margin-top:6px}
+.comp-section{margin-bottom:28px;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden;page-break-inside:avoid}
+.comp-header{display:flex;align-items:center;gap:12px;padding:14px 16px;background:#fafafa;border-bottom:1px solid #e5e5e5}
+.comp-num{width:32px;height:32px;border-radius:50%;background:#E8251A;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;flex-shrink:0}
+.comp-header h2{font-size:16px;font-weight:700;margin-bottom:3px}
+.cat-badge{font-size:11px;color:#7e22ce;background:#faf5ff;border:1px solid #e9d5ff;padding:2px 8px;border-radius:20px}
+.def-box{margin:14px 16px;padding:12px 14px;background:#f8f7ff;border:1px solid #e9d5ff;border-radius:6px}
+.def-label{font-size:10px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.def-box p{font-size:13px;line-height:1.65}
+.sec-title{font-size:12px;font-weight:700;color:#333;padding:12px 16px 6px}
+.q-title{border-top:1px solid #f0f0f0;margin-top:4px}
+.sd-list{padding:0 16px 14px;display:flex;flex-direction:column;gap:5px}
+.sd-row{display:flex;gap:12px;padding:9px 12px;border-radius:6px}
+.sd-score{flex-shrink:0;width:52px;text-align:center;font-size:19px;font-weight:900;line-height:1}
+.sd-score span{font-size:10px;font-weight:600;display:block;margin-top:2px}
+.sd-desc{flex:1;font-size:12px;line-height:1.55;padding-top:3px}
+.indicators{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 16px 14px}
+.ind-title{font-size:12px;font-weight:700;margin-bottom:6px}
+.strong-t{color:#16a34a}.weak-t{color:#dc2626}
+.ind-list{list-style:none;display:flex;flex-direction:column;gap:4px}
+.ind-list li{font-size:12px;padding:5px 10px;border-radius:5px}
+.ind-list li::before{content:"● ";font-size:10px}
+.strong-l li{background:#f0fdf4;border:1px solid #bbf7d0}
+.weak-l li{background:#fef2f2;border:1px solid #fca5a5}
+.q-list{padding:0 16px 14px;display:flex;flex-direction:column;gap:7px}
+.q-item{display:flex;gap:10px;padding:9px 12px;background:#f9f9f9;border:1px solid #eee;border-radius:6px}
+.q-num{font-size:11px;font-weight:700;color:#888;flex-shrink:0;padding-top:2px;min-width:22px}
+.q-texts{flex:1;display:flex;flex-direction:column;gap:5px}
+.q-line{display:flex;gap:8px;align-items:flex-start}
+.tier{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;flex-shrink:0;margin-top:1px}
+.adv{background:#eff6ff;color:#0369a1;border:1px solid #bfdbfe}
+.std{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0}
+.no-guide{padding:12px 16px;margin:14px 16px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px}
+@media print{body{padding:0}@page{margin:14mm;size:A4 portrait}.comp-section{page-break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="page-header">
+  <div><div class="logo-ccm">CCM</div><div class="logo-sub">Consultancy</div></div>
+  <div class="cs-meta">
+    <h1>${esc(caseStudy?.name || "")}</h1>
+    <p>${[caseStudy?.industry, caseStudy?.description].filter(Boolean).map(esc).join(" — ")}</p>
+    <div class="badge">Assessor Guide &nbsp;·&nbsp; ${assignedComps.length} competenc${assignedComps.length !== 1 ? "ies" : "y"}</div>
+  </div>
+</div>
+${compsHtml}
+<script>window.addEventListener("load",function(){window.print()});</script>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank");
+    if (win) { win.document.write(html); win.document.close(); }
+    else { notify("Pop-up blocked — please allow pop-ups for this site, then try again."); }
+  }
+
   // ─── Login screen ─────────────────────────────────────────────────────────────
   if (screen === "login") {
     const errBox = (msg) => msg ? (
@@ -1607,8 +1756,11 @@ async function deleteLibComp(id) {
                         return (
                           <div style={{ marginTop:"2rem" }}>
                             <h3 style={{ fontSize:15, margin:"0 0 1rem", color:"#333" }}>Competency Assessor Guides</h3>
-                            <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:"1rem" }}>
+                            <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:"0.5rem" }}>
                               One guide per competency — click ✨ Generate Guide to have Claude write the full descriptor, score anchors, and behavioral indicators.
+                            </p>
+                            <p style={{ fontSize:12, color:"#b45309", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:6, padding:"6px 10px", marginBottom:"1rem" }}>
+                              ⏳ Generation takes up to 25 seconds. Stay on this page while it runs, and generate one at a time.
                             </p>
                             {qgAssignedComps.map(assignment => {
                               const compId   = assignment.competency_id;
@@ -2077,7 +2229,7 @@ async function deleteLibComp(id) {
                 <p style={{ margin:"4px 0 0", fontSize:13, color:"#888" }}>Read-only guide for assessors during the assessment centre</p>
               </div>
               {agData && (
-                <button onClick={() => window.print()} style={S.btn("#111","#fff",{ fontSize:13 })}>Download PDF</button>
+                <button onClick={() => openPdfWindow(agData)} style={S.btn("#111","#fff",{ fontSize:13 })}>Download PDF</button>
               )}
             </div>
 
@@ -2089,7 +2241,12 @@ async function deleteLibComp(id) {
               </select>
             </div>
 
-            {agLoading && <p style={{ fontSize:13, color:"#aaa" }}>Loading…</p>}
+            {agLoading && (
+              <div style={{ display:"flex", alignItems:"center", gap:10, padding:"2rem 0", color:"#888", fontSize:13 }}>
+                <div style={{ width:22, height:22, border:"3px solid #e5e7eb", borderTopColor:CCM_RED, borderRadius:"50%", animation:"spin 0.8s linear infinite", flexShrink:0 }} />
+                Loading assessor guide…
+              </div>
+            )}
             {!agCsId && !agLoading && (
               <div style={{ textAlign:"center", marginTop:"4rem", color:"#bbb", fontSize:14 }}>Select a case study to view its assessor guide.</div>
             )}
@@ -2416,7 +2573,9 @@ async function deleteLibComp(id) {
                       <div style={{ ...S.card }}>
                         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"0.5rem" }}>
                           <h3 style={{ margin:0, fontSize:15 }}>Assign Competencies</h3>
-                          <span style={{ fontSize:12, color:"#888" }}>{csAssignedComps.length} assigned</span>
+                          <span style={{ fontSize:12, fontWeight:700, background: csAssignedComps.length > 0 ? CCM_RED : "#e5e7eb", color: csAssignedComps.length > 0 ? "#fff" : "#666", borderRadius:20, padding:"2px 10px", minWidth:24, textAlign:"center" }}>
+                            {csAssignedComps.length} {csAssignedComps.length === 1 ? "competency" : "competencies"} assigned
+                          </span>
                         </div>
                         <p style={{ fontSize:12, color:"#888", marginBottom:14, marginTop:0 }}>
                           Tick competencies from the library to apply them to this case study. These drive the assessor guide and question alignment.

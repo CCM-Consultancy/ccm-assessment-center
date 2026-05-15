@@ -88,10 +88,14 @@ Guidelines:
 - Write indicators as concise observable statements, no bullet prefixes
 - Return ONLY the raw JSON object`;
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+
   let anthropicRes;
   try {
     anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      signal: controller.signal,
       headers: {
         "x-api-key":         apiKey,
         "anthropic-version": "2023-06-01",
@@ -104,12 +108,15 @@ Guidelines:
       }),
     });
   } catch (err) {
+    clearTimeout(timeout);
+    const isTimeout = err.name === "AbortError";
     return {
-      statusCode: 502,
+      statusCode: isTimeout ? 504 : 502,
       headers,
-      body: JSON.stringify({ error: `Network error reaching Anthropic: ${err.message}` }),
+      body: JSON.stringify({ error: isTimeout ? "Guide generation timed out — please try again." : `Network error reaching Anthropic: ${err.message}` }),
     };
   }
+  clearTimeout(timeout);
 
   if (!anthropicRes.ok) {
     const errText = await anthropicRes.text();
