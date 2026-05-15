@@ -866,7 +866,18 @@ async function deleteLibComp(id) {
       } else {
         await db.assignCompetency(selectedId, compId, csAssignedComps.length);
       }
-      setCsAssignedComps(await db.getAssignedCompetencies(selectedId));
+      const updated = await db.getAssignedCompetencies(selectedId);
+      setCsAssignedComps(updated);
+      // Keep Q&G tab in sync when it has the same case study loaded
+      if (qgCsId === selectedId) {
+        setQgAssignedComps(updated);
+        const guides = {};
+        await Promise.all(updated.map(async a => {
+          const guide = await db.getCompetencyGuide(selectedId, a.competency_id);
+          if (guide) guides[a.competency_id] = guide;
+        }));
+        setQgCompGuides(guides);
+      }
     } catch(e) { notify(`Failed: ${e.message}`); }
     setCsAssignedLoading(false);
   }
@@ -1421,17 +1432,13 @@ async function deleteLibComp(id) {
                             />
                           </div>
 
-                          <div style={{ display:"grid", gridTemplateColumns:"1fr 120px", gap:12, marginBottom: aiSuggestions.length || aiLoading ? 0 : 14 }}>
+                          <div style={{ display:"grid", gridTemplateColumns:"1fr 100px auto", gap:12, marginBottom: aiSuggestions.length || aiLoading ? 0 : 14, alignItems:"flex-end" }}>
                             <div>
                               <label style={S.label}>Competency *</label>
                               <select
                                 style={S.input}
                                 value={qForm.competency_id}
-                                onChange={e => {
-                                  const id = e.target.value;
-                                  setQForm(f => ({ ...f, competency_id:id }));
-                                  if (!qForm.id) openAiPanel(id); // open synchronously, fetch async
-                                }}
+                                onChange={e => setQForm(f => ({ ...f, competency_id: e.target.value }))}
                               >
                                 <option value="">Select competency…</option>
                                 {qgCompetencies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -1445,6 +1452,12 @@ async function deleteLibComp(id) {
                                 onChange={e => setQForm(f => ({ ...f, display_order:e.target.value }))}
                               />
                             </div>
+                            <button
+                              onClick={() => qForm.competency_id && openAiPanel(qForm.competency_id)}
+                              disabled={!qForm.competency_id}
+                              title={qForm.competency_id ? "Get AI question suggestions for this competency" : "Select a competency first"}
+                              style={S.btn("#7e22ce","#fff",{ fontSize:12, whiteSpace:"nowrap", opacity: qForm.competency_id ? 1 : 0.4 })}
+                            >✨ Suggest Questions</button>
                           </div>
 
                           {/* ── AI Suggestions panel ─────────────────────── */}
@@ -1591,17 +1604,13 @@ async function deleteLibComp(id) {
                           { bg:"#f0fdf4", color:"#16a34a", border:"#bbf7d0" },
                           { bg:"#eff6ff", color:"#0369a1", border:"#bfdbfe" },
                         ];
-                        const compsWithQs = qgAssignedComps.filter(a =>
-                          qgQuestions.some(q => q.competency_id === a.competency_id)
-                        );
-                        if (!compsWithQs.length) return null;
                         return (
                           <div style={{ marginTop:"2rem" }}>
                             <h3 style={{ fontSize:15, margin:"0 0 1rem", color:"#333" }}>Competency Assessor Guides</h3>
                             <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:"1rem" }}>
                               One guide per competency — click ✨ Generate Guide to have Claude write the full descriptor, score anchors, and behavioral indicators.
                             </p>
-                            {compsWithQs.map(assignment => {
+                            {qgAssignedComps.map(assignment => {
                               const compId   = assignment.competency_id;
                               const comp     = assignment.competency;
                               const guide    = qgCompGuides[compId];
@@ -1611,9 +1620,12 @@ async function deleteLibComp(id) {
                                 <div key={compId} style={{ ...S.card, marginBottom:"1rem", borderLeft:`3px solid #7e22ce` }}>
                                   <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: guide ? 16 : 0 }}>
                                     <div>
-                                      <span style={{ fontWeight:700, fontSize:15 }}>{comp?.name || compId}</span>
-                                      <span style={{ fontSize:11, color:"#888", marginLeft:8 }}>{compQs.length} question{compQs.length !== 1 ? "s" : ""}</span>
-                                      {guide && <span style={{ fontSize:11, color:"#16a34a", marginLeft:8 }}>✓ Guide saved</span>}
+                                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
+                                        <span style={{ fontWeight:700, fontSize:15 }}>{comp?.name || compId}</span>
+                                        {comp?.category && <span style={{ fontSize:11, color:"#7e22ce", background:"#faf5ff", border:"1px solid #e9d5ff", padding:"2px 8px", borderRadius:20 }}>{comp.category}</span>}
+                                        {guide && <span style={{ fontSize:11, color:"#16a34a" }}>✓ Guide saved</span>}
+                                      </div>
+                                      <span style={{ fontSize:11, color:"#888" }}>{compQs.length} question{compQs.length !== 1 ? "s" : ""} in this module</span>
                                     </div>
                                     <button
                                       onClick={() => generateCompGuide(compId, comp?.name || compId)}
