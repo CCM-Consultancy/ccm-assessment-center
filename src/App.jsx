@@ -145,6 +145,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   // ─── Case study competency assignments ───────────────────────────────────────
   const [csAssignedComps,   setCsAssignedComps]   = useState([]);
   const [csAssignedLoading, setCsAssignedLoading] = useState(false);
+  const [csCompSaved,       setCsCompSaved]       = useState(false);
   // ─── Q&G per-competency guides ────────────────────────────────────────────────
   const [qgAssignedComps,   setQgAssignedComps]   = useState([]);
   const [qgCompGuides,      setQgCompGuides]      = useState({});
@@ -1021,7 +1022,7 @@ body{font-family:Arial,sans-serif;background:#fff;color:#111;font-size:13px;line
 .cs-meta h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .cs-meta p{font-size:12px;color:#666}
 .cs-meta .badge{font-size:11px;color:#888;margin-top:6px}
-.comp-section{margin-bottom:28px;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden;page-break-inside:avoid}
+.comp-section{margin-bottom:28px;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden}
 .comp-header{display:flex;align-items:center;gap:12px;padding:14px 16px;background:#fafafa;border-bottom:1px solid #e5e5e5}
 .comp-num{width:32px;height:32px;border-radius:50%;background:#E8251A;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;flex-shrink:0}
 .comp-header h2{font-size:16px;font-weight:700;margin-bottom:3px}
@@ -1053,7 +1054,7 @@ body{font-family:Arial,sans-serif;background:#fff;color:#111;font-size:13px;line
 .adv{background:#eff6ff;color:#0369a1;border:1px solid #bfdbfe}
 .std{background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0}
 .no-guide{padding:12px 16px;margin:14px 16px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px}
-@media print{body{padding:0}@page{margin:14mm;size:A4 portrait}.comp-section{page-break-inside:avoid}}
+@media print{body{padding:0}@page{margin:14mm;size:A4 portrait}}
 </style>
 </head>
 <body>
@@ -1066,13 +1067,15 @@ body{font-family:Arial,sans-serif;background:#fff;color:#111;font-size:13px;line
   </div>
 </div>
 ${compsHtml}
-<script>window.addEventListener("load",function(){window.print()});</script>
 </body>
 </html>`;
 
     const win = window.open("", "_blank");
-    if (win) { win.document.write(html); win.document.close(); }
-    else { notify("Pop-up blocked — please allow pop-ups for this site, then try again."); }
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      setTimeout(() => win.print(), 400);
+    } else { notify("Pop-up blocked — please allow pop-ups for this site, then try again."); }
   }
 
   // ─── Login screen ─────────────────────────────────────────────────────────────
@@ -2608,6 +2611,16 @@ ${compsHtml}
                             </div>
                           );
                         })}
+                        {libComps.length > 0 && (
+                          <div style={{ display:"flex", alignItems:"center", gap:12, marginTop:8, paddingTop:12, borderTop:"1px solid #f0f0f0" }}>
+                            <button
+                              onClick={() => { setCsCompSaved(true); setTimeout(() => setCsCompSaved(false), 2000); }}
+                              style={S.btn("#16a34a","#fff",{ fontSize:13 })}
+                            >
+                              {csCompSaved ? "✓ Saved" : "✓ Save Competency Selection"}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}

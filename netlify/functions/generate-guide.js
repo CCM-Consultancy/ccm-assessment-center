@@ -45,48 +45,15 @@ exports.handler = async (event) => {
         .join("\n")
     : "  No specific questions provided — write guidance applicable to this competency in general.";
 
-  const prompt = `You are an expert assessment centre designer creating a comprehensive assessor guide for a competency-based interview.
+  const prompt = `Return ONLY valid JSON, no markdown, no explanation.
 
-Case Study: ${caseStudyName}
-Competency: ${competencyName}
+Case study: "${caseStudyName}"
+Competency: "${competencyName}"
+${questions.length ? `\nQuestions:\n${questionsText}` : ""}
 
-Questions being assessed:
-${questionsText}
+{"definition":"1-2 sentences contextualised to ${caseStudyName}","score_descriptors":[{"score":0,"label":"Not Attempted","description":"max 20 words"},{"score":1,"label":"Ineffective","description":"max 20 words"},{"score":2,"label":"Inconsistent","description":"max 20 words"},{"score":3,"label":"Effective","description":"max 20 words"},{"score":4,"label":"Strong","description":"max 20 words"},{"score":5,"label":"Exceptional","description":"max 20 words"}],"strong_indicators":["observable positive behaviour","observable positive behaviour","observable positive behaviour"],"weak_indicators":["observable negative behaviour","observable negative behaviour","observable negative behaviour"]}
 
-Generate a complete assessor guide as a JSON object with this exact structure — return ONLY valid JSON, no markdown fences, no explanation:
-
-{
-  "definition": "2-3 sentence definition of ${competencyName} contextualised specifically to ${caseStudyName}",
-  "score_descriptors": [
-    { "score": 0, "label": "Not Attempted",  "description": "Candidate does not address this competency at all" },
-    { "score": 1, "label": "Ineffective",    "description": "Behaviourally anchored description of ineffective performance in this case study context" },
-    { "score": 2, "label": "Inconsistent",   "description": "Behaviourally anchored description for score 2" },
-    { "score": 3, "label": "Effective",      "description": "Behaviourally anchored description for score 3 — the expected standard" },
-    { "score": 4, "label": "Strong",         "description": "Behaviourally anchored description for score 4" },
-    { "score": 5, "label": "Exceptional",    "description": "Behaviourally anchored description for score 5 — outstanding performance" }
-  ],
-  "strong_indicators": [
-    "Specific observable positive behaviour 1",
-    "Specific observable positive behaviour 2",
-    "Specific observable positive behaviour 3",
-    "Specific observable positive behaviour 4",
-    "Specific observable positive behaviour 5"
-  ],
-  "weak_indicators": [
-    "Specific observable negative behaviour 1",
-    "Specific observable negative behaviour 2",
-    "Specific observable negative behaviour 3",
-    "Specific observable negative behaviour 4",
-    "Specific observable negative behaviour 5"
-  ]
-}
-
-Guidelines:
-- Contextualise every descriptor to ${caseStudyName} — reference the scenario, not generic competency theory
-- Score descriptors must be behaviourally anchored: what the candidate says or does in their response
-- Strong indicators signal scores of 4–5; weak indicators signal scores of 0–2
-- Write indicators as concise observable statements, no bullet prefixes
-- Return ONLY the raw JSON object`;
+Rules: anchor every descriptor to behaviours in ${caseStudyName}. Return ONLY the JSON.`;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25000);
@@ -103,7 +70,7 @@ Guidelines:
       },
       body: JSON.stringify({
         model:      "claude-sonnet-4-6",
-        max_tokens: 2000,
+        max_tokens: 800,
         messages:   [{ role: "user", content: prompt }],
       }),
     });
