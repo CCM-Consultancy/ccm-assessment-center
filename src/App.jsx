@@ -110,7 +110,7 @@ const [newCompSaving,  setNewCompSaving]  = useState(false);
 const [editCompId,     setEditCompId]     = useState(null);
 const [editCompForm,   setEditCompForm]   = useState({ name:"", category:"", definition:"", observed_in:"" });
 const [editCompSaving, setEditCompSaving] = useState(false);
-  const [mbModForm,      setMbModForm]      = useState({ name:"" });
+  const [mbModForm,      setMbModForm]      = useState({ name:"", module_type:"questions" });
   const emptyScenForm = { case_study_text:"", appendix_text:"", image_1_url:"", image_1_caption:"", image_2_url:"", image_2_caption:"", image_3_url:"", image_3_caption:"", file_url:"", file_name:"", file_type:"" };
   const [mbScenForm,     setMbScenForm]     = useState({ ...emptyScenForm });
   const [mbLevelIds,     setMbLevelIds]     = useState([]);
@@ -510,7 +510,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
       setMbModuleLevels(data.moduleLevels || []);
       setMbScenarios(data.scenarios  || []);
       setMbSelModId(null);
-      setMbModForm({ name:"", description:"" });
+      setMbModForm({ name:"", description:"", module_type:"questions" });
       setMbScenForm({ standard:"", advanced:"" });
       setMbLevelIds([]);
     } catch(e) { notify(`Failed to load: ${e.message}`); }
@@ -521,7 +521,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
     setMbSelModId(moduleId);
     setMbScenEditing(false);
     const mod = mbModules.find(m => m.id === moduleId);
-    setMbModForm({ name: mod?.title || "" });
+    setMbModForm({ name: mod?.title || "", module_type: mod?.module_type || "questions" });
     const levelIds = mbModuleLevels.filter(ml => ml.module_id === moduleId).map(ml => ml.level_id);
     setMbLevelIds(levelIds);
     const scen = mbScenarios.find(s => s.module_id === moduleId);
@@ -554,7 +554,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
       setMbNewName("");
       // Select the new module
       setMbSelModId(mod.id);
-      setMbModForm({ name: mod.title || "" });
+      setMbModForm({ name: mod.title || "", module_type: "questions" });
       setMbLevelIds([]);
       setMbScenForm({ ...emptyScenForm });
       notify("Module added.");
@@ -574,6 +574,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
         case_study_id: mbCsId,
         title:         mbModForm.name.trim(),
         display_order: mod?.display_order ?? 0,
+        module_type:   mbModForm.module_type || "questions",
       });
       // 2. Save level access
       await db.saveModuleLevels(mbSelModId, mbLevelIds);
@@ -1373,6 +1374,14 @@ ${compsHtml}
                     <div>
                       <label style={S.label}>Module Name *</label>
                       <input style={S.input} value={mbModForm.name} onChange={e => setMbModForm(f => ({ ...f, name:e.target.value }))} placeholder="e.g. In-Tray Exercise" />
+                    </div>
+                    <div style={{ marginTop:14 }}>
+                      <label style={S.label}>Module Type</label>
+                      <select style={S.input} value={mbModForm.module_type || "questions"} onChange={e => setMbModForm(f => ({ ...f, module_type:e.target.value }))}>
+                        <option value="questions">Interview Questions only</option>
+                        <option value="presentation">Presentation Task only</option>
+                        <option value="both">Both — Questions then Presentation Task</option>
+                      </select>
                     </div>
                   </div>
 
