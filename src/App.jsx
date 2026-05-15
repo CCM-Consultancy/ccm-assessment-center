@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { CCM_RED, S } from "./lib/constants";
 import * as db from "./lib/db";
 
@@ -154,6 +154,12 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const [agCsId,            setAgCsId]            = useState("");
   const [agData,            setAgData]            = useState(null);
   const [agLoading,         setAgLoading]         = useState(false);
+
+  // ─── Dashboard ────────────────────────────────────────────────────────────────
+  const [dbCohortId, setDbCohortId] = useState("");
+  const [dbModules,  setDbModules]  = useState([]);
+  const [dbResults,  setDbResults]  = useState([]);
+  const [dbLoading,  setDbLoading]  = useState(false);
 
   // ─── Self-registration ────────────────────────────────────────────────────────
   const [loginMode,  setLoginMode]  = useState("signin"); // "signin" | "register"
@@ -1078,6 +1084,70 @@ ${compsHtml}
     } else { notify("Pop-up blocked — please allow pop-ups for this site, then try again."); }
   }
 
+  // ─── Dashboard handlers ──────────────────────────────────────────────────────
+  async function loadDashboard(cohortId) {
+    setDbModules([]); setDbResults([]);
+    if (!cohortId) return;
+    setDbLoading(true);
+    try {
+      const cohort = cohorts.find(c => c.id === cohortId);
+      if (!cohort) return;
+      const cohortParts = participants.filter(p => p.cohort_id === cohortId);
+      const [modules, results] = await Promise.all([
+        db.getModulesForCaseStudy(cohort.case_study_id),
+        cohortParts.length ? db.getResultsForParticipants(cohortParts.map(p => p.id)) : Promise.resolve([]),
+      ]);
+      setDbModules(modules);
+      setDbResults(results);
+    } catch(e) { notify(`Failed to load dashboard: ${e.message}`); }
+    setDbLoading(false);
+  }
+
+  function downloadDashboardCsv() {
+    const cohort = cohorts.find(c => c.id === dbCohortId);
+    const cs     = caseStudies.find(c => c.id === cohort?.case_study_id);
+    const parts  = participants.filter(p => p.cohort_id === dbCohortId);
+    const header = [
+      "Name","Username","Job Title","Level","Cohort","Case Study",
+      ...dbModules.map(m => `${m.title} — Status`),
+      ...dbModules.map(m => `${m.title} — Time (min)`),
+      "Total Time (min)","Tab Switches",
+    ];
+    const rMap = {};
+    dbResults.forEach(r => {
+      if (!rMap[r.participant_id]) rMap[r.participant_id] = {};
+      rMap[r.participant_id][r.module_id] = r;
+    });
+    const rows = parts.map(p => {
+      const level   = allLevels.find(l => l.id === p.level_id);
+      const pMods   = rMap[p.id] || {};
+      const statuses = dbModules.map(m => pMods[m.id] ? "Completed" : "Not Started");
+      const times    = dbModules.map(m => pMods[m.id] ? Math.round((pMods[m.id].time_spent || 0) / 60) : "");
+      const total    = Math.round(Object.values(pMods).reduce((s, r) => s + (r.time_spent || 0), 0) / 60);
+      const ts       = Object.values(pMods).reduce((s, r) => {
+        const a = r.answers; return s + (Array.isArray(a) ? 0 : (a?.tab_switches || 0));
+      }, 0);
+      return [p.name, p.username, p.role||"", level?.name||"", cohort?.name||"", cs?.name||"", ...statuses, ...times, total||"", ts||""];
+    });
+    const csv = [header, ...rows].map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const a   = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([csv], { type:"text/csv" })), download: `dashboard-${cohort?.name||"cohort"}.csv` });
+    a.click(); URL.revokeObjectURL(a.href);
+  }
+
+  function emailAccessCode(co) {
+    const cs       = caseStudies.find(c => c.id === co.case_study_id);
+    const appUrl   = window.location.origin;
+    const dates    = co.start_date && co.end_date ? `${co.start_date} to ${co.end_date}` : co.start_date || co.end_date || "TBC";
+    const subject  = encodeURIComponent(`CCM Assessment Centre — ${co.name}`);
+    const body     = encodeURIComponent(
+      `Dear Participant,\n\nYou are invited to complete the CCM Assessment Centre for ${cs?.name || "the assessment"}.\n\n` +
+      `Cohort: ${co.name}\nDates: ${dates}\n\n` +
+      `To register:\n1. Visit: ${appUrl}\n2. Click "Register"\n3. Enter your access code: ${co.access_code}\n\n` +
+      `Please keep this code confidential.\n\nKind regards`
+    );
+    window.open(`mailto:?subject=${subject}&body=${body}`);
+  }
+
   // ─── Login screen ─────────────────────────────────────────────────────────────
   if (screen === "login") {
     const errBox = (msg) => msg ? (
@@ -1917,6 +1987,9 @@ ${compsHtml}
                       <button onClick={() => { navigator.clipboard.writeText(co.access_code); notify("Copied!"); }} style={S.btn("#f5f5f5","#555",{ fontSize:11, border:"1px solid #ddd", padding:"6px 10px" })}>
                         Copy
                       </button>
+                      <button onClick={() => emailAccessCode(co)} style={S.btn("#eff6ff","#1d4ed8",{ fontSize:11, border:"1px solid #bfdbfe", padding:"6px 10px" })}>
+                        ✉ Email Code
+                      </button>
                     </div>
                     <div style={{ display:"flex", gap:6 }}>
                       <button onClick={() => toggleCohortActive(co)} style={S.btn("#fff", co.is_active?"#dc2626":"#16a34a", { fontSize:12, border:`1px solid ${co.is_active?"#fca5a5":"#bbf7d0"}` })}>
@@ -2223,7 +2296,304 @@ ${compsHtml}
     </div>
   );
 })()}
-        {adminTab==="dashboard"       && <Placeholder title="Dashboard"          description="Per-cohort completion grid showing all participants and modules." />}
+        {adminTab==="dashboard" && (
+          <div style={{ maxWidth:1200, margin:"0 auto", padding:"1.5rem" }}>
+            {/* Header + cohort selector */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1.5rem", flexWrap:"wrap", gap:12 }}>
+              <div>
+                <h2 style={{ margin:0, fontSize:18, fontWeight:700 }}>Dashboard</h2>
+                <p style={{ margin:"4px 0 0", fontSize:13, color:"#888" }}>Cohort completion overview and integrity monitoring</p>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <select style={{ ...S.input, width:320 }} value={dbCohortId} onChange={e => { setDbCohortId(e.target.value); loadDashboard(e.target.value); }}>
+                  <option value="">Select cohort…</option>
+                  {cohorts.map(co => {
+                    const cs = caseStudies.find(c => c.id === co.case_study_id);
+                    return <option key={co.id} value={co.id}>{co.name}{cs ? ` — ${cs.name}` : ""}</option>;
+                  })}
+                </select>
+                <button onClick={() => { reloadParticipants(); if (dbCohortId) loadDashboard(dbCohortId); }} style={S.btn("#fff","#555",{ fontSize:12, border:"1px solid #ddd" })}>↻</button>
+              </div>
+            </div>
+
+            {!dbCohortId && (
+              <div style={{ textAlign:"center", marginTop:"5rem", color:"#bbb", fontSize:14 }}>
+                Select a cohort above to view its dashboard.
+              </div>
+            )}
+
+            {dbCohortId && (() => {
+              const cohort     = cohorts.find(c => c.id === dbCohortId);
+              const cs         = caseStudies.find(c => c.id === cohort?.case_study_id);
+              const cohortParts = participants.filter(p => p.cohort_id === dbCohortId);
+
+              const rMap = {};
+              dbResults.forEach(r => {
+                if (!rMap[r.participant_id]) rMap[r.participant_id] = {};
+                rMap[r.participant_id][r.module_id] = r;
+              });
+
+              function cellStatus(pId, mId) { return rMap[pId]?.[mId] ? "done" : "none"; }
+              function cellTime(pId, mId) {
+                const r = rMap[pId]?.[mId];
+                if (!r?.time_spent) return "";
+                const m = Math.round(r.time_spent / 60);
+                return m > 0 ? `${m}m` : "<1m";
+              }
+              function totalMins(pId) {
+                return Math.round(Object.values(rMap[pId]||{}).reduce((s,r) => s+(r.time_spent||0), 0) / 60);
+              }
+              function tabSwitches(pId) {
+                return Object.values(rMap[pId]||{}).reduce((s,r) => {
+                  const a = r.answers; return s + (Array.isArray(a) ? 0 : (a?.tab_switches||0));
+                }, 0);
+              }
+              function doneCount(pId) { return dbModules.filter(m => rMap[pId]?.[m.id]).length; }
+
+              const thS = { padding:"8px 10px", fontSize:11, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.04em", color:"#888", background:"#fafafa", borderBottom:"2px solid #e5e5e5", whiteSpace:"nowrap" };
+              const tdS = { padding:"7px 8px", borderBottom:"1px solid #f5f5f5", fontSize:13 };
+
+              // Level grouping
+              const LCOLORS = ["#1d4ed8","#7e22ce","#c2410c","#15803d","#0369a1","#92400e"];
+              const levelNames = [...new Set(cohortParts.map(p => allLevels.find(l => l.id === p.level_id)?.name || "Unknown"))];
+              const lColorMap  = Object.fromEntries(levelNames.map((n,i) => [n, LCOLORS[i%LCOLORS.length]]));
+
+              function renderRow(p, showActions) {
+                const level    = allLevels.find(l => l.id === p.level_id);
+                const lvlName  = level?.name || "—";
+                const lvlColor = lColorMap[lvlName] || "#555";
+                const ts       = tabSwitches(p.id);
+                const flagged  = ts > 3;
+                const tot      = totalMins(p.id);
+                const isReset  = resetPwd.id === p.id;
+                return (
+                  <tr key={p.id} style={{ background: flagged ? "#fff8f8" : "transparent" }}>
+                    <td style={{ ...tdS, paddingLeft:12 }}>
+                      <div style={{ fontWeight:600 }}>{p.name}</div>
+                      {p.role && <div style={{ fontSize:11, color:"#888" }}>{p.role}</div>}
+                    </td>
+                    {showActions && (
+                      <td style={{ ...tdS, textAlign:"center" }}>
+                        <span style={{ fontSize:11, fontWeight:600, color:lvlColor, background:"#f0f0f0", padding:"2px 8px", borderRadius:20, whiteSpace:"nowrap" }}>{lvlName}</span>
+                      </td>
+                    )}
+                    <td style={{ ...tdS, textAlign:"center" }}>
+                      <span style={{ fontSize:12, color: doneCount(p.id)===dbModules.length && dbModules.length>0 ? "#16a34a" : doneCount(p.id)>0 ? "#d97706" : "#aaa" }}>
+                        {doneCount(p.id)}/{dbModules.length}
+                      </span>
+                    </td>
+                    {dbModules.map(m => {
+                      const done = cellStatus(p.id, m.id) === "done";
+                      const time = cellTime(p.id, m.id);
+                      return (
+                        <td key={m.id} style={{ ...tdS, textAlign:"center" }}>
+                          <div style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", background: done?"#f0fdf4":"#f5f5f5", border:`1px solid ${done?"#bbf7d0":"#e5e5e5"}`, borderRadius:6, padding:"3px 8px", minWidth:44 }}>
+                            <span style={{ fontSize:12, fontWeight:700, color: done?"#16a34a":"#ccc" }}>{done?"✓":"—"}</span>
+                            {time && <span style={{ fontSize:10, color:"#888", marginTop:1 }}>{time}</span>}
+                          </div>
+                        </td>
+                      );
+                    })}
+                    <td style={{ ...tdS, textAlign:"center" }}>
+                      <span style={{ fontSize:12, color:"#555" }}>{tot ? `${tot}m` : "—"}</span>
+                    </td>
+                    <td style={{ ...tdS, textAlign:"center" }}>
+                      <span style={{ fontSize:12, fontWeight: flagged?700:400, color: flagged?"#dc2626":"#555", background: flagged?"#fef2f2":"transparent", padding: flagged?"2px 6px":0, borderRadius:4 }}>
+                        {ts > 0 ? ts : "—"}{flagged ? " ⚠" : ""}
+                      </span>
+                    </td>
+                    {showActions && (
+                      <td style={{ ...tdS, textAlign:"right", paddingRight:8 }}>
+                        {isReset ? (
+                          <span style={{ display:"inline-flex", gap:4, alignItems:"center" }}>
+                            <input type="password" placeholder="New password" value={resetPwd.value}
+                              onChange={e => setResetPwd(r => ({ ...r, value:e.target.value }))}
+                              style={{ ...S.input, width:110, fontSize:11, padding:"3px 6px" }} />
+                            <button onClick={saveResetPassword} disabled={resetPwd.saving}
+                              style={S.btn(CCM_RED,"#fff",{ fontSize:10, padding:"3px 8px" })}>{resetPwd.saving?"…":"Save"}</button>
+                            <button onClick={() => setResetPwd({ id:null, value:"", saving:false })}
+                              style={S.btn("#fff","#666",{ fontSize:10, padding:"3px 6px", border:"1px solid #ddd" })}>✕</button>
+                          </span>
+                        ) : (
+                          <span style={{ display:"inline-flex", gap:4 }}>
+                            <button onClick={() => { editParticipant(p); setAdminTab("participants"); }}
+                              style={S.btn("#fff","#333",{ fontSize:10, padding:"3px 8px", border:"1px solid #ddd" })}>Edit</button>
+                            <button onClick={() => setResetPwd({ id:p.id, value:"", saving:false })}
+                              style={S.btn("#fff","#555",{ fontSize:10, padding:"3px 8px", border:"1px solid #ddd" })}>Pwd</button>
+                            <button onClick={() => deleteParticipant(p)}
+                              style={S.btn("#fff","#dc2626",{ fontSize:10, padding:"3px 8px", border:"1px solid #fca5a5" })}>Delete</button>
+                          </span>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              }
+
+              return (
+                <>
+                  {/* ── Cohort info card ── */}
+                  <div style={{ ...S.card, marginBottom:"1.5rem", display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:16, flexWrap:"wrap" }}>
+                    <div style={{ flex:1, minWidth:200 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:6 }}>
+                        <span style={{ fontWeight:700, fontSize:16 }}>{cohort?.name}</span>
+                        <span style={{ fontSize:11, padding:"2px 8px", borderRadius:20, fontWeight:500, background: cohort?.is_active?"#f0fdf4":"#f5f5f5", color: cohort?.is_active?"#16a34a":"#888", border:`1px solid ${cohort?.is_active?"#bbf7d0":"#ddd"}` }}>
+                          {cohort?.is_active ? "Active" : "Inactive"}
+                        </span>
+                      </div>
+                      <div style={{ fontSize:13, color:"#666", display:"flex", flexWrap:"wrap", gap:16 }}>
+                        {cs && <span>📋 {cs.name}</span>}
+                        {cohort?.start_date && <span>📅 {cohort.start_date}{cohort.end_date ? ` → ${cohort.end_date}` : ""}</span>}
+                        <span>👥 {cohortParts.length} participant{cohortParts.length!==1?"s":""}</span>
+                        {dbModules.length > 0 && <span>📦 {dbModules.length} module{dbModules.length!==1?"s":""}</span>}
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+                      <div style={{ fontFamily:"monospace", fontSize:18, fontWeight:700, letterSpacing:4, color:"#333", background:"#f8f8f8", padding:"8px 16px", borderRadius:8, border:"1px solid #e5e5e5" }}>
+                        {cohort?.access_code}
+                      </div>
+                      <button onClick={() => { navigator.clipboard.writeText(cohort?.access_code||""); notify("Copied!"); }} style={S.btn("#f5f5f5","#555",{ fontSize:12, border:"1px solid #ddd" })}>Copy</button>
+                      <button onClick={() => cohort && emailAccessCode(cohort)} style={S.btn("#eff6ff","#1d4ed8",{ fontSize:12, border:"1px solid #bfdbfe" })}>✉ Email Code</button>
+                      {!dbLoading && cohortParts.length > 0 && (
+                        <button onClick={downloadDashboardCsv} style={S.btn("#f0fdf4","#16a34a",{ fontSize:12, border:"1px solid #bbf7d0" })}>⬇ CSV</button>
+                      )}
+                    </div>
+                  </div>
+
+                  {dbLoading && (
+                    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"2rem 0", color:"#888", fontSize:13 }}>
+                      <div style={{ width:20, height:20, border:"3px solid #e5e7eb", borderTopColor:CCM_RED, borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
+                      Loading dashboard data…
+                    </div>
+                  )}
+
+                  {!dbLoading && cohortParts.length === 0 && (
+                    <div style={{ textAlign:"center", padding:"3rem", color:"#bbb", fontSize:14 }}>No participants in this cohort yet.</div>
+                  )}
+
+                  {!dbLoading && cohortParts.length > 0 && (
+                    <>
+                      {/* ── Section 1: Participant completion heatmap ── */}
+                      <div style={{ ...S.card, marginBottom:"1.5rem", padding:0, overflow:"hidden" }}>
+                        <div style={{ padding:"14px 16px", borderBottom:"1px solid #f0f0f0", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                          <h3 style={{ margin:0, fontSize:15, fontWeight:700 }}>Module Completion</h3>
+                          <span style={{ fontSize:12, color:"#888" }}>
+                            {dbModules.length === 0 ? "No modules configured" : `${dbResults.length} submission${dbResults.length!==1?"s":""} across ${dbModules.length} module${dbModules.length!==1?"s":""}`}
+                          </span>
+                        </div>
+                        <div style={{ overflowX:"auto" }}>
+                          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+                            <thead>
+                              <tr>
+                                <th style={{ ...thS, textAlign:"left", paddingLeft:12, minWidth:160 }}>Participant</th>
+                                <th style={{ ...thS, textAlign:"center", minWidth:80 }}>Level</th>
+                                <th style={{ ...thS, textAlign:"center", minWidth:56 }}>Done</th>
+                                {dbModules.map(m => (
+                                  <th key={m.id} style={{ ...thS, textAlign:"center", minWidth:72, maxWidth:100 }}>
+                                    <div style={{ maxWidth:100, overflow:"hidden", textOverflow:"ellipsis" }} title={m.title}>{m.title}</div>
+                                  </th>
+                                ))}
+                                <th style={{ ...thS, textAlign:"center", minWidth:72 }}>Total</th>
+                                <th style={{ ...thS, textAlign:"center", minWidth:80 }}>Tab Switches</th>
+                                <th style={{ ...thS, textAlign:"right", paddingRight:8, minWidth:190 }}>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {cohortParts.map(p => renderRow(p, true))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* ── Section 2: Level heatmap ── */}
+                      <div style={{ ...S.card, marginBottom:"1.5rem", padding:0, overflow:"hidden" }}>
+                        <div style={{ padding:"14px 16px", borderBottom:"1px solid #f0f0f0" }}>
+                          <h3 style={{ margin:0, fontSize:15, fontWeight:700 }}>By Level</h3>
+                        </div>
+                        <div style={{ overflowX:"auto" }}>
+                          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+                            <thead>
+                              <tr>
+                                <th style={{ ...thS, textAlign:"left", paddingLeft:12, minWidth:160 }}>Participant</th>
+                                <th style={{ ...thS, textAlign:"center", minWidth:56 }}>Done</th>
+                                {dbModules.map(m => (
+                                  <th key={m.id} style={{ ...thS, textAlign:"center", minWidth:72 }}>
+                                    <div style={{ maxWidth:100, overflow:"hidden", textOverflow:"ellipsis" }} title={m.title}>{m.title}</div>
+                                  </th>
+                                ))}
+                                <th style={{ ...thS, textAlign:"center", minWidth:72 }}>Total</th>
+                                <th style={{ ...thS, textAlign:"center", minWidth:80 }}>Tab Switches</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {levelNames.map(lvlName => {
+                                const lvlColor = lColorMap[lvlName] || "#555";
+                                const grp = cohortParts.filter(p => (allLevels.find(l => l.id === p.level_id)?.name || "Unknown") === lvlName);
+                                return (
+                                  <React.Fragment key={lvlName}>
+                                    <tr>
+                                      <td colSpan={3 + dbModules.length} style={{ padding:"5px 12px", background:`${lvlColor}18`, borderBottom:"1px solid #e5e5e5", borderTop:"1px solid #e5e5e5" }}>
+                                        <span style={{ fontSize:12, fontWeight:700, color:lvlColor }}>{lvlName}</span>
+                                        <span style={{ fontSize:11, color:"#888", marginLeft:8 }}>{grp.length} participant{grp.length!==1?"s":""}</span>
+                                      </td>
+                                    </tr>
+                                    {grp.map(p => renderRow(p, false))}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* ── Section 3: Integrity monitor ── */}
+                      <div style={{ ...S.card, padding:0, overflow:"hidden" }}>
+                        <div style={{ padding:"14px 16px", borderBottom:"1px solid #f0f0f0", display:"flex", alignItems:"center", gap:12 }}>
+                          <h3 style={{ margin:0, fontSize:15, fontWeight:700 }}>Integrity Monitor</h3>
+                          <span style={{ fontSize:12, color:"#888" }}>Flags participants with more than 3 tab switches during assessment</span>
+                        </div>
+                        <div style={{ padding:"0 16px" }}>
+                          {cohortParts.map(p => {
+                            const ts      = tabSwitches(p.id);
+                            const tot     = totalMins(p.id);
+                            const flagged = ts > 3;
+                            const pResArr = Object.values(rMap[p.id]||{});
+                            const lastAt  = pResArr.length ? pResArr.reduce((l,r) => (r.completed_at||"") > l ? (r.completed_at||"") : l, "") : null;
+                            return (
+                              <div key={p.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 0", borderBottom:"1px solid #f5f5f5" }}>
+                                <span style={{ fontSize:18, flexShrink:0 }}>{flagged ? "🚩" : "✓"}</span>
+                                <div style={{ flex:1, minWidth:120 }}>
+                                  <div style={{ fontWeight:600, fontSize:13, color: flagged?"#dc2626":"#111" }}>{p.name}</div>
+                                  {p.role && <div style={{ fontSize:11, color:"#888" }}>{p.role}</div>}
+                                </div>
+                                <div style={{ textAlign:"center", minWidth:90 }}>
+                                  <div style={{ fontWeight:700, fontSize:15, color:"#333" }}>{tot ? `${tot} min` : "—"}</div>
+                                  <div style={{ fontSize:10, color:"#aaa", textTransform:"uppercase", letterSpacing:"0.04em" }}>Total time</div>
+                                </div>
+                                <div style={{ textAlign:"center", minWidth:80 }}>
+                                  <div style={{ fontWeight:700, fontSize:20, color: flagged?"#dc2626":ts>0?"#555":"#ccc" }}>{ts>0?ts:"—"}</div>
+                                  <div style={{ fontSize:10, color:"#aaa", textTransform:"uppercase", letterSpacing:"0.04em" }}>Tab switches</div>
+                                </div>
+                                {lastAt && (
+                                  <div style={{ fontSize:11, color:"#aaa", minWidth:90, textAlign:"right" }}>
+                                    Last: {new Date(lastAt).toLocaleDateString()}
+                                  </div>
+                                )}
+                                {flagged && (
+                                  <span style={{ fontSize:12, fontWeight:700, color:"#dc2626", background:"#fef2f2", border:"1px solid #fca5a5", padding:"3px 10px", borderRadius:6 }}>Flagged</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        )}
         {adminTab==="assessor-guide" && (
           <div style={{ maxWidth:900, margin:"0 auto", padding:"1.5rem" }}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1.25rem" }}>

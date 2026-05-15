@@ -463,6 +463,15 @@ export async function moduleHasResults(moduleId) {
   return Array.isArray(rows) && rows.length > 0;
 }
 
+export async function getModulesForCaseStudy(csId) {
+  return arr(await q("cs_modules", "GET", null, `?case_study_id=eq.${csId}&select=*&order=display_order.asc`));
+}
+
+export async function getResultsForParticipants(participantIds) {
+  if (!participantIds.length) return [];
+  return arr(await q("ac_results", "GET", null, `?participant_id=in.${inList(participantIds)}&select=*`));
+}
+
 export async function loadParticipantAssessmentData(participantId) {
   const [results, ratings, requests] = await Promise.all([
     q("ac_results",         "GET", null, `?participant_id=eq.${participantId}&select=*`),
