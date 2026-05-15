@@ -50,42 +50,39 @@ exports.handler = async (event) => {
 Case study: "${caseStudyName}"
 Competency: "${competencyName}"
 ${questions.length ? `\nQuestions being assessed:\n${questionsText}\n` : ""}
-Generate a JSON object with this exact structure:
+Generate a JSON object with this exact structure (keep all text very short):
 
 {
-  "definition": "2-3 sentences defining ${competencyName} as it applies specifically to the ${caseStudyName} scenario",
+  "definition": "One sentence defining ${competencyName} in the ${caseStudyName} context.",
   "score_descriptors": [
-    { "score": 0, "label": "Not Attempted",  "description": "2-3 sentences: what the candidate says or does (or fails to do) that signals this score in the ${caseStudyName} context" },
-    { "score": 1, "label": "Ineffective",    "description": "2-3 sentences of specific observable behaviours signalling score 1" },
-    { "score": 2, "label": "Inconsistent",   "description": "2-3 sentences of specific observable behaviours signalling score 2" },
-    { "score": 3, "label": "Effective",      "description": "2-3 sentences of specific observable behaviours signalling score 3 — the expected standard" },
-    { "score": 4, "label": "Strong",         "description": "2-3 sentences of specific observable behaviours signalling score 4" },
-    { "score": 5, "label": "Exceptional",    "description": "2-3 sentences of specific observable behaviours signalling score 5 — outstanding" }
+    { "score": 0, "label": "Not Attempted",  "description": "Max 15 words describing score 0 behaviour." },
+    { "score": 1, "label": "Ineffective",    "description": "Max 15 words describing score 1 behaviour." },
+    { "score": 2, "label": "Inconsistent",   "description": "Max 15 words describing score 2 behaviour." },
+    { "score": 3, "label": "Effective",      "description": "Max 15 words describing score 3 behaviour." },
+    { "score": 4, "label": "Strong",         "description": "Max 15 words describing score 4 behaviour." },
+    { "score": 5, "label": "Exceptional",    "description": "Max 15 words describing score 5 behaviour." }
   ],
   "strong_indicators": [
-    "Specific observable positive behaviour 1",
-    "Specific observable positive behaviour 2",
-    "Specific observable positive behaviour 3",
-    "Specific observable positive behaviour 4",
-    "Specific observable positive behaviour 5"
+    "Positive observable behaviour, max 10 words.",
+    "Positive observable behaviour, max 10 words.",
+    "Positive observable behaviour, max 10 words."
   ],
   "weak_indicators": [
-    "Specific observable negative behaviour 1",
-    "Specific observable negative behaviour 2",
-    "Specific observable negative behaviour 3",
-    "Specific observable negative behaviour 4",
-    "Specific observable negative behaviour 5"
+    "Negative observable behaviour, max 10 words.",
+    "Negative observable behaviour, max 10 words.",
+    "Negative observable behaviour, max 10 words."
   ]
 }
 
 Rules:
-- Every descriptor and indicator must reference observable candidate behaviour in the ${caseStudyName} context
-- Strong indicators signal scores 4-5; weak indicators signal scores 0-2
-- Write indicators as concise first-person observable statements (what the assessor sees/hears)
+- definition: exactly 1 sentence
+- score_descriptors: exactly 6 items, each description max 15 words
+- strong_indicators: exactly 3 items, each max 10 words
+- weak_indicators: exactly 3 items, each max 10 words
 - Return ONLY the raw JSON object`;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000);
+  const timeout = setTimeout(() => controller.abort(), 8000);
 
   let anthropicRes;
   try {
@@ -99,7 +96,7 @@ Rules:
       },
       body: JSON.stringify({
         model:      "claude-sonnet-4-6",
-        max_tokens: 1500,
+        max_tokens: 500,
         messages:   [{ role: "user", content: prompt }],
       }),
     });
