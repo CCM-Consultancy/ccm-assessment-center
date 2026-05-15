@@ -142,6 +142,18 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const [aiSelected,    setAiSelected]    = useState(new Set());
   const [aiAdding,      setAiAdding]      = useState(false);
 
+  // ─── Case study competency assignments ───────────────────────────────────────
+  const [csAssignedComps,   setCsAssignedComps]   = useState([]);
+  const [csAssignedLoading, setCsAssignedLoading] = useState(false);
+  // ─── Q&G per-competency guides ────────────────────────────────────────────────
+  const [qgAssignedComps,   setQgAssignedComps]   = useState([]);
+  const [qgCompGuides,      setQgCompGuides]      = useState({});
+  const [guideGenLoading,   setGuideGenLoading]   = useState({});
+  // ─── Assessor Guide tab ───────────────────────────────────────────────────────
+  const [agCsId,            setAgCsId]            = useState("");
+  const [agData,            setAgData]            = useState(null);
+  const [agLoading,         setAgLoading]         = useState(false);
+
   // ─── Self-registration ────────────────────────────────────────────────────────
   const [loginMode,  setLoginMode]  = useState("signin"); // "signin" | "register"
   const [regStep,    setRegStep]    = useState("code");   // "code" | "form"
@@ -183,13 +195,18 @@ const [editCompSaving, setEditCompSaving] = useState(false);
       setSelectedId("new");
       setCsForm({ name:"", industry:"", description:"", is_active:false });
       setCsData(null);
+      setCsAssignedComps([]);
       return;
     }
     setSelectedId(id);
     setCsLoading(true);
     try {
-      const data = await db.getFullCaseStudy(id);
+      const [data, assigned] = await Promise.all([
+        db.getFullCaseStudy(id),
+        db.getAssignedCompetencies(id),
+      ]);
       setCsData(data);
+      setCsAssignedComps(assigned);
       setCsForm({
         name:        data.caseStudy?.name        || "",
         industry:    data.caseStudy?.industry    || "",
@@ -628,9 +645,22 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   async function loadQgCs(csId) {
   setQgCsId(csId); setQgModuleId(""); setQFormOpen(false); setGuideOpen(null);
   setQForm({ ...emptyQForm }); closeAiPanel();
-  if (!csId) { setQgData(null); return; }
+  if (!csId) { setQgData(null); setQgAssignedComps([]); setQgCompGuides({}); return; }
   setQgLoading(true);
-  try { setQgData(await db.getFullCaseStudy(csId)); }
+  try {
+    const [data, assigned] = await Promise.all([
+      db.getFullCaseStudy(csId),
+      db.getAssignedCompetencies(csId),
+    ]);
+    setQgData(data);
+    setQgAssignedComps(assigned);
+    const guides = {};
+    await Promise.all(assigned.map(async a => {
+      const guide = await db.getCompetencyGuide(csId, a.competency_id);
+      if (guide) guides[a.competency_id] = guide;
+    }));
+    setQgCompGuides(guides);
+  }
   catch(e) { notify(`Failed to load: ${e.message}`); }
   setQgLoading(false);
 }
@@ -692,7 +722,18 @@ async function deleteLibComp(id) {
 
   async function reloadQgData() {
     if (!qgCsId) return;
-    try { setQgData(await db.getFullCaseStudy(qgCsId)); }
+    try {
+      const data = await db.getFullCaseStudy(qgCsId);
+      setQgData(data);
+      if (qgAssignedComps.length) {
+        const guides = {};
+        await Promise.all(qgAssignedComps.map(async a => {
+          const guide = await db.getCompetencyGuide(qgCsId, a.competency_id);
+          if (guide) guides[a.competency_id] = guide;
+        }));
+        setQgCompGuides(guides);
+      }
+    }
     catch(e) { notify(`Reload failed: ${e.message}`); }
   }
 
@@ -751,8 +792,10 @@ async function deleteLibComp(id) {
     // Reset content but leave panel open — caller is responsible for opening it
     setAiSuggestions([]); setAiSelected(new Set()); setAiError(null); setAiLoading(true);
     if (!compId) { setAiLoading(false); return; }
-    const csName   = qgData?.caseStudy?.name || "the case study";
-    const compName = (qgData?.competencies || []).find(c => c.id === compId)?.name || compId;
+    const csName      = qgData?.caseStudy?.name || "the case study";
+    const assignedA   = qgAssignedComps.find(a => a.competency_id === compId);
+    const legacyComp  = (qgData?.competencies || []).find(c => c.id === compId);
+    const compName    = assignedA?.competency?.name || legacyComp?.name || compId;
     try {
       const suggestions = await db.suggestQuestions(csName, compName);
       setAiSuggestions(Array.isArray(suggestions) ? suggestions.slice(0, 5) : []);
@@ -811,6 +854,65 @@ async function deleteLibComp(id) {
       notify("Assessor guide saved.");
     } catch(e) { notify(`Save failed: ${e.message}`); }
     setGuideSaving(false);
+  }
+
+  // ─── Case study competency assignment ─────────────────────────────────────────
+  async function toggleCsComp(compId, isAssigned) {
+    if (!selectedId || selectedId === "new") return;
+    setCsAssignedLoading(true);
+    try {
+      if (isAssigned) {
+        await db.unassignCompetency(selectedId, compId);
+      } else {
+        await db.assignCompetency(selectedId, compId, csAssignedComps.length);
+      }
+      setCsAssignedComps(await db.getAssignedCompetencies(selectedId));
+    } catch(e) { notify(`Failed: ${e.message}`); }
+    setCsAssignedLoading(false);
+  }
+
+  // ─── Per-competency guide generation ─────────────────────────────────────────
+  async function generateCompGuide(compId, compName) {
+    const csName = qgData?.caseStudy?.name || "the case study";
+    const questions = (qgData?.questions || [])
+      .filter(q => q.module_id === qgModuleId && q.competency_id === compId)
+      .map(q => ({ advanced: q.text_advanced, standard: q.text_standard }));
+    setGuideGenLoading(prev => ({ ...prev, [compId]: true }));
+    try {
+      const result = await db.generateAssessorGuide(csName, compName, questions);
+      await db.saveCompetencyGuide({
+        case_study_id:     qgCsId,
+        competency_id:     compId,
+        definition:        result.definition,
+        score_descriptors: result.score_descriptors,
+        strong_indicators: result.strong_indicators,
+        weak_indicators:   result.weak_indicators,
+      });
+      const updated = { ...qgCompGuides };
+      updated[compId] = await db.getCompetencyGuide(qgCsId, compId);
+      setQgCompGuides(updated);
+      notify("✓ Guide generated and saved.");
+    } catch(e) { notify(`Generate failed: ${e.message}`); }
+    setGuideGenLoading(prev => ({ ...prev, [compId]: false }));
+  }
+
+  // ─── Assessor Guide tab data loader ──────────────────────────────────────────
+  async function loadAgData(csId) {
+    if (!csId) { setAgData(null); return; }
+    setAgLoading(true);
+    try {
+      const [fullData, assigned] = await Promise.all([
+        db.getFullCaseStudy(csId),
+        db.getAssignedCompetencies(csId),
+      ]);
+      const guides = {};
+      await Promise.all(assigned.map(async a => {
+        const guide = await db.getCompetencyGuide(csId, a.competency_id);
+        if (guide) guides[a.competency_id] = guide;
+      }));
+      setAgData({ ...fullData, assignedComps: assigned, guides });
+    } catch(e) { notify(`Failed to load assessor guide: ${e.message}`); }
+    setAgLoading(false);
   }
 
   // ─── Login screen ─────────────────────────────────────────────────────────────
@@ -1218,10 +1320,12 @@ async function deleteLibComp(id) {
           </>
         )}
         {adminTab==="questions-guide" && (() => {
-          const qgModules      = qgData?.modules      || [];
-          const qgCompetencies = qgData?.competencies || [];
-          const qgQuestions    = (qgData?.questions   || []).filter(q => q.module_id === qgModuleId);
-          const qgGuides       = qgData?.guide        || [];
+          const qgModules      = qgData?.modules || [];
+          const qgCompetencies = qgAssignedComps.length > 0
+            ? qgAssignedComps.map(a => ({ id: a.competency_id, name: a.competency?.name || a.competency_id, ...a.competency }))
+            : (qgData?.competencies || []);
+          const qgQuestions    = (qgData?.questions || []).filter(q => q.module_id === qgModuleId);
+          const qgGuides       = qgData?.guide || [];
 
           // Shared badge style
           const tierBadge = (tier) => ({
@@ -1269,7 +1373,7 @@ async function deleteLibComp(id) {
                   {qgCsId && qgModuleId && qgCompetencies.length === 0 && !qgLoading && (
                     <div style={{ ...S.card, textAlign:"center", padding:"2rem", color:"#888" }}>
                       <div style={{ fontSize:24, marginBottom:8 }}>⚠</div>
-                      <div>No competencies defined for this case study. Add competencies first in the Case Studies tab.</div>
+                      <div>No competencies assigned to this case study. Assign competencies in the Case Studies tab first.</div>
                     </div>
                   )}
 
@@ -1432,9 +1536,7 @@ async function deleteLibComp(id) {
 
                       {qgQuestions.map((question, idx) => {
                         const comp    = qgCompetencies.find(c => c.id === question.competency_id);
-                        const guide   = qgGuides.find(g => g.question_id === question.id);
                         const isEditingQ = qFormOpen && qForm.id === question.id;
-                        const isEditingG = guideOpen === question.id;
 
                         return (
                           <div key={question.id} style={{ ...S.card, marginBottom:"1rem", opacity: isEditingQ ? 0.5 : 1 }}>
@@ -1466,7 +1568,7 @@ async function deleteLibComp(id) {
                             </div>
 
                             {/* Question text */}
-                            <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:16 }}>
+                            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
                               {[["advanced","text_advanced"],["standard","text_standard"]].map(([tier, field]) => (
                                 <div key={tier} style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
                                   <span style={{ ...tierBadge(tier), flexShrink:0, marginTop:1 }}>{tier}</span>
@@ -1475,99 +1577,109 @@ async function deleteLibComp(id) {
                               ))}
                             </div>
 
-                            {/* ── Assessor Guide section ───────────────── */}
-                            <div style={{ borderTop:"1px solid #f0f0f0", paddingTop:12 }}>
-                              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom: isEditingG ? 14 : 0 }}>
-                                <span style={{ fontSize:12, fontWeight:600, color:"#555" }}>Assessor Guide</span>
-                                {!isEditingG && (
-                                  <span style={{ fontSize:11, color: guide ? "#16a34a" : "#f59e0b" }}>
-                                    {guide ? "✓ Set" : "⚠ Not set"}
-                                  </span>
-                                )}
-                                <div style={{ flex:1 }} />
-                                <button
-                                  onClick={() => isEditingG ? setGuideOpen(null) : openGuideEdit(question.id)}
-                                  style={isEditingG
-                                    ? S.btn("#111","#fff",{ fontSize:11, padding:"4px 10px" })
-                                    : S.btn("#fff","#555",{ fontSize:11, padding:"4px 10px", border:"1px solid #ddd" })}
-                                >
-                                  {isEditingG ? "✕ Close" : guide ? "Edit Guide" : "+ Add Guide"}
-                                </button>
-                              </div>
-
-                              {/* Guide read-only summary */}
-                              {!isEditingG && guide && (
-                                <div style={{ display:"flex", flexDirection:"column", gap:8, marginTop:10 }}>
-                                  {guide.model_answer && (
-                                    <div style={{ fontSize:12, color:"#555" }}>
-                                      <span style={{ fontWeight:600 }}>Model answer: </span>
-                                      <span style={{ color:"#777" }}>{guide.model_answer.length > 140 ? guide.model_answer.slice(0,140)+"…" : guide.model_answer}</span>
-                                    </div>
-                                  )}
-                                  {[["Strong", guide.strong_indicators, "#16a34a", "#f0fdf4", "#bbf7d0"],
-                                    ["Weak",   guide.weak_indicators,   "#dc2626", "#fef2f2", "#fca5a5"]
-                                  ].map(([label, text, color, bg, border]) => {
-                                    const lines = (typeof text === "string" ? text : (Array.isArray(text) ? text.join("\n") : "")).split("\n").filter(Boolean);
-                                    if (!lines.length) return null;
-                                    return (
-                                      <div key={label}>
-                                        <div style={{ fontSize:11, fontWeight:600, color, marginBottom:4 }}>{label} Indicators</div>
-                                        <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
-                                          {lines.map((ln, i) => (
-                                            <div key={i} style={{ fontSize:12, padding:"4px 10px", background:bg, border:`1px solid ${border}`, borderRadius:5, color:"#222" }}>● {ln}</div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-
-                              {/* Guide edit form */}
-                              {isEditingG && (
-                                <div style={{ marginTop:4 }}>
-                                  <div style={{ marginBottom:14 }}>
-                                    <label style={S.label}>Model Answer</label>
-                                    <textarea
-                                      style={{ ...S.textarea, height:100 }}
-                                      value={guideForm.model_answer}
-                                      onChange={e => setGuideForm(f => ({ ...f, model_answer:e.target.value }))}
-                                      placeholder="The overall model answer an assessor should look for…"
-                                    />
-                                  </div>
-                                  <div style={{ marginBottom:16 }}>
-                                    <label style={S.label}>Best Answer — Score 5</label>
-                                    <textarea
-                                      style={{ ...S.textarea, height:80 }}
-                                      value={guideForm.best_answer}
-                                      onChange={e => setGuideForm(f => ({ ...f, best_answer:e.target.value }))}
-                                      placeholder="What a score of 5 looks like — specific, observable behaviours…"
-                                    />
-                                  </div>
-                                  {[
-                                    { key:"strong_indicators", label:"Strong Indicators", placeholder:"One indicator per line…\ne.g. Clearly articulates a structured approach\nIdentifies key stakeholders proactively", color:"#16a34a" },
-                                    { key:"weak_indicators",   label:"Weak Indicators",   placeholder:"One indicator per line…\ne.g. Gives only generic or vague responses\nFails to consider impact on others",       color:"#dc2626" },
-                                  ].map(({ key, label, placeholder, color }) => (
-                                    <div key={key} style={{ marginBottom:16 }}>
-                                      <label style={{ ...S.label, color }}>{label}</label>
-                                      <p style={{ fontSize:11, color:"#aaa", margin:"0 0 6px" }}>One indicator per line. Type or paste all at once.</p>
-                                      <textarea
-                                        style={{ ...S.textarea, height:110, fontSize:12 }}
-                                        value={guideForm[key]}
-                                        onChange={e => setGuideForm(f => ({ ...f, [key]:e.target.value }))}
-                                        placeholder={placeholder}
-                                      />
-                                    </div>
-                                  ))}
-                                  <button onClick={() => saveQgGuide(question.id)} disabled={guideSaving} style={S.btn(CCM_RED,"#fff",{ opacity:guideSaving?0.6:1 })}>
-                                    {guideSaving ? "Saving…" : "Save Guide"}
-                                  </button>
-                                </div>
-                              )}
-                            </div>
                           </div>
                         );
                       })}
+
+                      {/* ── Per-competency Assessor Guide section ─────────── */}
+                      {qgAssignedComps.length > 0 && (() => {
+                        const scoreColors = [
+                          { bg:"#f5f5f5", color:"#666",    border:"#e0e0e0" },
+                          { bg:"#fef2f2", color:"#dc2626", border:"#fca5a5" },
+                          { bg:"#fff7ed", color:"#ea580c", border:"#fdba74" },
+                          { bg:"#fefce8", color:"#ca8a04", border:"#fde047" },
+                          { bg:"#f0fdf4", color:"#16a34a", border:"#bbf7d0" },
+                          { bg:"#eff6ff", color:"#0369a1", border:"#bfdbfe" },
+                        ];
+                        const compsWithQs = qgAssignedComps.filter(a =>
+                          qgQuestions.some(q => q.competency_id === a.competency_id)
+                        );
+                        if (!compsWithQs.length) return null;
+                        return (
+                          <div style={{ marginTop:"2rem" }}>
+                            <h3 style={{ fontSize:15, margin:"0 0 1rem", color:"#333" }}>Competency Assessor Guides</h3>
+                            <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:"1rem" }}>
+                              One guide per competency — click ✨ Generate Guide to have Claude write the full descriptor, score anchors, and behavioral indicators.
+                            </p>
+                            {compsWithQs.map(assignment => {
+                              const compId   = assignment.competency_id;
+                              const comp     = assignment.competency;
+                              const guide    = qgCompGuides[compId];
+                              const isGen    = guideGenLoading[compId];
+                              const compQs   = qgQuestions.filter(q => q.competency_id === compId);
+                              return (
+                                <div key={compId} style={{ ...S.card, marginBottom:"1rem", borderLeft:`3px solid #7e22ce` }}>
+                                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: guide ? 16 : 0 }}>
+                                    <div>
+                                      <span style={{ fontWeight:700, fontSize:15 }}>{comp?.name || compId}</span>
+                                      <span style={{ fontSize:11, color:"#888", marginLeft:8 }}>{compQs.length} question{compQs.length !== 1 ? "s" : ""}</span>
+                                      {guide && <span style={{ fontSize:11, color:"#16a34a", marginLeft:8 }}>✓ Guide saved</span>}
+                                    </div>
+                                    <button
+                                      onClick={() => generateCompGuide(compId, comp?.name || compId)}
+                                      disabled={isGen}
+                                      style={S.btn("#7e22ce","#fff",{ fontSize:12, opacity:isGen?0.6:1 })}
+                                    >
+                                      {isGen ? "✨ Generating…" : "✨ Generate Guide"}
+                                    </button>
+                                  </div>
+
+                                  {guide && (
+                                    <div>
+                                      {guide.definition && (
+                                        <div style={{ marginBottom:16, padding:"12px 14px", background:"#f8f7ff", border:"1px solid #e9d5ff", borderRadius:8 }}>
+                                          <div style={{ fontSize:11, fontWeight:700, color:"#6d28d9", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Competency Definition</div>
+                                          <p style={{ fontSize:13, lineHeight:1.6, margin:0 }}>{guide.definition}</p>
+                                        </div>
+                                      )}
+
+                                      {Array.isArray(guide.score_descriptors) && guide.score_descriptors.length > 0 && (
+                                        <div style={{ marginBottom:16 }}>
+                                          <div style={{ fontSize:12, fontWeight:700, color:"#333", marginBottom:8 }}>Score Descriptors (0–5)</div>
+                                          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                                            {guide.score_descriptors.map((sd, i) => {
+                                              const col = scoreColors[sd.score] || scoreColors[0];
+                                              return (
+                                                <div key={i} style={{ display:"flex", gap:10, padding:"10px 12px", background:col.bg, border:`1px solid ${col.border}`, borderRadius:8 }}>
+                                                  <div style={{ flexShrink:0, width:54, textAlign:"center" }}>
+                                                    <div style={{ fontSize:18, fontWeight:900, color:col.color }}>{sd.score}</div>
+                                                    <div style={{ fontSize:10, fontWeight:600, color:col.color, lineHeight:1.2 }}>{sd.label}</div>
+                                                  </div>
+                                                  <div style={{ flex:1, fontSize:12, lineHeight:1.55, color:"#333" }}>{sd.description}</div>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                                        {[
+                                          { label:"Strong Indicators", key:"strong_indicators", color:"#16a34a", bg:"#f0fdf4", border:"#bbf7d0" },
+                                          { label:"Weak Indicators",   key:"weak_indicators",   color:"#dc2626", bg:"#fef2f2", border:"#fca5a5" },
+                                        ].map(({ label, key, color, bg, border }) => {
+                                          const items = Array.isArray(guide[key]) ? guide[key] : (typeof guide[key]==="string" ? guide[key].split("\n").filter(Boolean) : []);
+                                          if (!items.length) return null;
+                                          return (
+                                            <div key={key}>
+                                              <div style={{ fontSize:12, fontWeight:700, color, marginBottom:6 }}>{label}</div>
+                                              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                                                {items.map((item, i) => (
+                                                  <div key={i} style={{ fontSize:12, padding:"5px 10px", background:bg, border:`1px solid ${border}`, borderRadius:6 }}>● {item}</div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </>
                   )}
                 </div>
@@ -1945,7 +2057,186 @@ async function deleteLibComp(id) {
   );
 })()}
         {adminTab==="dashboard"       && <Placeholder title="Dashboard"          description="Per-cohort completion grid showing all participants and modules." />}
-        {adminTab==="assessor-guide"  && <Placeholder title="Assessor Guide"     description="Dynamic guide pulled from the active case study." />}
+        {adminTab==="assessor-guide" && (
+          <div style={{ maxWidth:900, margin:"0 auto", padding:"1.5rem" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1.25rem" }}>
+              <div>
+                <h2 style={{ margin:0, fontSize:18, fontWeight:700 }}>Assessor Guide</h2>
+                <p style={{ margin:"4px 0 0", fontSize:13, color:"#888" }}>Read-only guide for assessors during the assessment centre</p>
+              </div>
+              {agData && (
+                <button onClick={() => window.print()} style={S.btn("#111","#fff",{ fontSize:13 })}>Download PDF</button>
+              )}
+            </div>
+
+            <div style={{ marginBottom:"1.5rem" }}>
+              <label style={S.label}>Case Study</label>
+              <select style={{ ...S.input, width:320 }} value={agCsId} onChange={e => { setAgCsId(e.target.value); loadAgData(e.target.value); }}>
+                <option value="">Select case study…</option>
+                {caseStudies.map(cs => <option key={cs.id} value={cs.id}>{cs.name}</option>)}
+              </select>
+            </div>
+
+            {agLoading && <p style={{ fontSize:13, color:"#aaa" }}>Loading…</p>}
+            {!agCsId && !agLoading && (
+              <div style={{ textAlign:"center", marginTop:"4rem", color:"#bbb", fontSize:14 }}>Select a case study to view its assessor guide.</div>
+            )}
+
+            {agData && !agLoading && (() => {
+              const { caseStudy, assignedComps, guides, modules, questions } = agData;
+              const tierBadge = (tier) => ({
+                fontSize:10, padding:"2px 7px", borderRadius:20, fontWeight:600,
+                background: tier==="advanced" ? "#eff6ff" : "#f0fdf4",
+                color:      tier==="advanced" ? "#0369a1" : "#16a34a",
+                border:     `1px solid ${tier==="advanced" ? "#bfdbfe" : "#bbf7d0"}`,
+              });
+              const scoreColors = [
+                { bg:"#f5f5f5", color:"#666",    border:"#e0e0e0" },
+                { bg:"#fef2f2", color:"#dc2626", border:"#fca5a5" },
+                { bg:"#fff7ed", color:"#ea580c", border:"#fdba74" },
+                { bg:"#fefce8", color:"#ca8a04", border:"#fde047" },
+                { bg:"#f0fdf4", color:"#16a34a", border:"#bbf7d0" },
+                { bg:"#eff6ff", color:"#0369a1", border:"#bfdbfe" },
+              ];
+              return (
+                <div id="ag-printable">
+                  {/* Case study header */}
+                  <div style={{ ...S.card, marginBottom:"1.5rem", borderLeft:`4px solid ${CCM_RED}` }}>
+                    <h2 style={{ margin:"0 0 6px", fontSize:20, color:"#111" }}>{caseStudy?.name}</h2>
+                    {caseStudy?.industry && <p style={{ margin:"0 0 4px", fontSize:13, color:"#555" }}>{caseStudy.industry}</p>}
+                    {caseStudy?.description && <p style={{ margin:0, fontSize:13, color:"#777", lineHeight:1.55 }}>{caseStudy.description}</p>}
+                    <div style={{ marginTop:10, fontSize:12, color:"#888" }}>
+                      {assignedComps.length} competenc{assignedComps.length !== 1 ? "ies" : "y"} · {modules.length} module{modules.length !== 1 ? "s" : ""}
+                    </div>
+                  </div>
+
+                  {assignedComps.length === 0 && (
+                    <div style={{ ...S.card, textAlign:"center", color:"#aaa", padding:"2rem" }}>
+                      No competencies assigned. Go to the Case Studies tab to assign competencies to this case study.
+                    </div>
+                  )}
+
+                  {assignedComps.map((assignment, idx) => {
+                    const compId     = assignment.competency_id;
+                    const comp       = assignment.competency;
+                    const guide      = guides[compId];
+                    const compQs     = (questions || []).filter(q => q.competency_id === compId);
+
+                    return (
+                      <div key={compId} style={{ ...S.card, marginBottom:"1.5rem" }}>
+                        {/* Competency title bar */}
+                        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16, paddingBottom:12, borderBottom:"1px solid #f0f0f0" }}>
+                          <div style={{ width:34, height:34, borderRadius:"50%", background:CCM_RED, color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:900, fontSize:15, flexShrink:0 }}>
+                            {idx + 1}
+                          </div>
+                          <div>
+                            <h3 style={{ margin:0, fontSize:17, fontWeight:700 }}>{comp?.name || compId}</h3>
+                            {comp?.category && <span style={{ fontSize:11, color:"#888" }}>{comp.category}</span>}
+                          </div>
+                          {!guide && (
+                            <span style={{ marginLeft:"auto", fontSize:11, color:"#f59e0b", background:"#fffbeb", border:"1px solid #fde68a", padding:"3px 10px", borderRadius:20 }}>⚠ No guide generated yet</span>
+                          )}
+                        </div>
+
+                        {!guide && (
+                          <div style={{ padding:"1rem", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:8, fontSize:13, color:"#92400e", marginBottom: compQs.length ? 16 : 0 }}>
+                            No assessor guide for this competency yet. Go to the Questions &amp; Guide tab to generate one.
+                          </div>
+                        )}
+
+                        {guide && (
+                          <>
+                            {guide.definition && (
+                              <div style={{ marginBottom:20, padding:"14px 16px", background:"#f8f7ff", border:"1px solid #e9d5ff", borderRadius:8 }}>
+                                <div style={{ fontSize:11, fontWeight:700, color:"#6d28d9", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Competency Definition</div>
+                                <p style={{ fontSize:13, lineHeight:1.65, margin:0 }}>{guide.definition}</p>
+                              </div>
+                            )}
+
+                            {Array.isArray(guide.score_descriptors) && guide.score_descriptors.length > 0 && (
+                              <div style={{ marginBottom:20 }}>
+                                <div style={{ fontSize:13, fontWeight:700, marginBottom:10, color:"#333" }}>Score Descriptors</div>
+                                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                                  {guide.score_descriptors.map((sd, i) => {
+                                    const col = scoreColors[sd.score] || scoreColors[0];
+                                    return (
+                                      <div key={i} style={{ display:"flex", gap:14, padding:"12px 14px", background:col.bg, border:`1px solid ${col.border}`, borderRadius:8 }}>
+                                        <div style={{ flexShrink:0, width:60, textAlign:"center" }}>
+                                          <div style={{ fontSize:22, fontWeight:900, color:col.color }}>{sd.score}</div>
+                                          <div style={{ fontSize:10, fontWeight:600, color:col.color, lineHeight:1.2 }}>{sd.label}</div>
+                                        </div>
+                                        <div style={{ flex:1 }}>
+                                          <p style={{ fontSize:13, lineHeight:1.6, margin:0, color:"#333" }}>{sd.description}</p>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
+                              {[
+                                { label:"Strong Behavioral Indicators", key:"strong_indicators", color:"#16a34a", bg:"#f0fdf4", border:"#bbf7d0" },
+                                { label:"Weak Behavioral Indicators",   key:"weak_indicators",   color:"#dc2626", bg:"#fef2f2", border:"#fca5a5" },
+                              ].map(({ label, key, color, bg, border }) => {
+                                const items = Array.isArray(guide[key]) ? guide[key] : (typeof guide[key]==="string" ? guide[key].split("\n").filter(Boolean) : []);
+                                return (
+                                  <div key={key}>
+                                    <div style={{ fontSize:12, fontWeight:700, color, marginBottom:8 }}>{label}</div>
+                                    {items.length === 0
+                                      ? <p style={{ fontSize:12, color:"#bbb" }}>None set.</p>
+                                      : (
+                                        <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                                          {items.map((item, i) => (
+                                            <div key={i} style={{ fontSize:12, padding:"6px 10px", background:bg, border:`1px solid ${border}`, borderRadius:6 }}>● {item}</div>
+                                          ))}
+                                        </div>
+                                      )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
+
+                        {/* Questions under this competency */}
+                        {compQs.length > 0 && (
+                          <div style={{ borderTop:"1px solid #f0f0f0", paddingTop:16, marginTop: guide ? 0 : 0 }}>
+                            <div style={{ fontSize:13, fontWeight:700, color:"#333", marginBottom:10 }}>
+                              Questions ({compQs.length})
+                            </div>
+                            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                              {compQs.map((q, qi) => (
+                                <div key={q.id} style={{ padding:"12px 14px", background:"#f9f9f9", border:"1px solid #eee", borderRadius:8 }}>
+                                  <div style={{ fontSize:11, fontWeight:700, color:"#888", marginBottom:8 }}>Q{qi + 1}</div>
+                                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                                    {q.text_advanced && (
+                                      <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+                                        <span style={{ ...tierBadge("advanced"), flexShrink:0, marginTop:1 }}>advanced</span>
+                                        <span style={{ fontSize:13, lineHeight:1.5, color:"#222" }}>{q.text_advanced}</span>
+                                      </div>
+                                    )}
+                                    {q.text_standard && (
+                                      <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+                                        <span style={{ ...tierBadge("standard"), flexShrink:0, marginTop:1 }}>standard</span>
+                                        <span style={{ fontSize:13, lineHeight:1.5, color:"#555" }}>{q.text_standard}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+        )}
         {adminTab==="live-panel"      && <Placeholder title="Live Panel"         description="Real-time question bank for use during live interviews." />}
         {adminTab==="reports"         && <Placeholder title="Reports"            description="AI rating, manual override, PDF download, and report approval." />}
         {adminTab==="settings"        && <Placeholder title="Settings"           description="Assessor name, client logo, and score weightings." />}
@@ -2098,42 +2389,57 @@ async function deleteLibComp(id) {
                     </div>
                   </div>
 
-                  {/* Competencies card */}
-                  <div style={{ ...S.card }}>
-                    <h3 style={{ margin:"0 0 0.5rem", fontSize:15 }}>Competencies</h3>
-                    <p style={{ fontSize:12, color:"#888", marginBottom:14, marginTop:0 }}>
-                      Keywords are matched against interview transcripts to detect which competency is being demonstrated.
-                    </p>
-
-                    {competencies.length === 0 && <p style={{ fontSize:13, color:"#aaa", marginBottom:12 }}>No competencies yet.</p>}
-
-                    <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:20 }}>
-                      {competencies.map(comp => (
-                        <div key={comp.id} style={{ padding:"12px 14px", background:"#f8f8f8", borderRadius:8, border:"1px solid #eee" }}>
-                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-                            <span style={{ fontWeight:600, fontSize:13 }}>{comp.name}</span>
-                            <button onClick={() => removeCompetency(comp.id)} style={{ background:"none", border:"none", color:"#dc2626", cursor:"pointer", fontSize:12 }}>Remove</button>
-                          </div>
-                          <label style={S.label}>Detection Keywords</label>
-                          <KeywordEditor keywords={comp.keywords || []} onChange={kws => updateKeywords(comp.id, kws)} />
+                  {/* Assign Competencies card */}
+                  {(() => {
+                    const CATCOLORS = {
+                      "Leadership":             { bg:"#eff6ff", color:"#1d4ed8", border:"#bfdbfe" },
+                      "Cognitive":              { bg:"#f0fdf4", color:"#15803d", border:"#bbf7d0" },
+                      "Interpersonal":          { bg:"#fdf4ff", color:"#7e22ce", border:"#e9d5ff" },
+                      "Personal Effectiveness": { bg:"#fff7ed", color:"#c2410c", border:"#fed7aa" },
+                      "Functional & Executive": { bg:"#fef2f2", color:"#b91c1c", border:"#fecaca" },
+                    };
+                    const assignedIds = new Set(csAssignedComps.map(a => a.competency_id));
+                    const CATS = ["Leadership","Cognitive","Interpersonal","Personal Effectiveness","Functional & Executive"];
+                    return (
+                      <div style={{ ...S.card }}>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"0.5rem" }}>
+                          <h3 style={{ margin:0, fontSize:15 }}>Assign Competencies</h3>
+                          <span style={{ fontSize:12, color:"#888" }}>{csAssignedComps.length} assigned</span>
                         </div>
-                      ))}
-                    </div>
-
-                    <div style={{ display:"flex", gap:8, alignItems:"flex-end" }}>
-                      <div style={{ flex:1 }}>
-                        <label style={S.label}>Competency Name</label>
-                        <input
-                          style={S.input}
-                          value={compForm.name}
-                          onChange={e => setCompForm(f => ({ ...f, name:e.target.value }))}
-                          placeholder="e.g. Strategic Thinking"
-                          onKeyDown={e => e.key==="Enter" && addCompetency()}
-                        />
+                        <p style={{ fontSize:12, color:"#888", marginBottom:14, marginTop:0 }}>
+                          Tick competencies from the library to apply them to this case study. These drive the assessor guide and question alignment.
+                        </p>
+                        {csAssignedLoading && <p style={{ fontSize:13, color:"#aaa" }}>Saving…</p>}
+                        {libComps.length === 0 && (
+                          <p style={{ fontSize:13, color:"#aaa" }}>No competencies in the library yet. Add some in the Competencies tab first.</p>
+                        )}
+                        {CATS.map(cat => {
+                          const items = libComps.filter(c => c.category === cat);
+                          if (!items.length) return null;
+                          const col = CATCOLORS[cat] || { bg:"#f5f5f5", color:"#333", border:"#ddd" };
+                          return (
+                            <div key={cat} style={{ marginBottom:16 }}>
+                              <div style={{ fontSize:11, fontWeight:700, padding:"2px 10px", borderRadius:20, background:col.bg, color:col.color, border:`1px solid ${col.border}`, display:"inline-block", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em" }}>{cat}</div>
+                              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                                {items.map(comp => {
+                                  const checked = assignedIds.has(comp.id);
+                                  return (
+                                    <label key={comp.id} style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"10px 12px", background: checked ? "#fff7f7" : "#f9f9f9", border:`1px solid ${checked ? "#fca5a5" : "#eee"}`, borderRadius:8, cursor:"pointer" }}>
+                                      <input type="checkbox" checked={checked} onChange={() => toggleCsComp(comp.id, checked)} style={{ marginTop:2, flexShrink:0 }} />
+                                      <div>
+                                        <div style={{ fontWeight:600, fontSize:13 }}>{comp.name}</div>
+                                        {comp.definition && <div style={{ fontSize:11, color:"#888", marginTop:2, lineHeight:1.4 }}>{comp.definition.length > 120 ? comp.definition.slice(0,120)+"…" : comp.definition}</div>}
+                                      </div>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <button onClick={addCompetency} style={S.btn(CCM_RED,"#fff")}>Add Competency</button>
-                    </div>
-                  </div>
+                    );
+                  })()}
                 </>
               )}
             </div>

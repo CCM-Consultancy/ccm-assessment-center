@@ -137,6 +137,16 @@ export async function unassignCompetency(caseStudyId, competencyId) {
 }
 
 // ─── Assessor Guides (per competency) ────────────────────────────────────────
+// Table: cs_competency_guides
+//   id             uuid primary key default gen_random_uuid()
+//   case_study_id  uuid references case_studies(id) on delete cascade
+//   competency_id  uuid references ccm_competencies(id) on delete cascade
+//   definition     text
+//   score_descriptors jsonb  -- array of {score, label, description}
+//   strong_indicators jsonb  -- string[]
+//   weak_indicators   jsonb  -- string[]
+//   updated_at     timestamptz
+//   unique(case_study_id, competency_id)
 
 export async function getCompetencyGuide(caseStudyId, competencyId) {
   return first(await q("cs_competency_guides", "GET", null,
