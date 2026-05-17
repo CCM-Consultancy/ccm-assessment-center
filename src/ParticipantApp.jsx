@@ -179,17 +179,6 @@ const READING_SECONDS = 300; // 5 minutes
 // ─── Anti-Cheat Setup Screen ───────────────────────────────────────────────────
 function AntiCheatScreen({ session, agreeChecked, setAgreeChecked, onBegin }) {
   const assessmentName = session?.caseStudy?.name || "Assessment";
-  const [countdown, setCountdown] = useState(READING_SECONDS);
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (countdown <= 0) return;
-    const id = setTimeout(() => setCountdown(c => c - 1), 1000);
-    return () => clearTimeout(id);
-  }, [countdown]);
-
-  const timerDone = countdown <= 0;
-  const canBegin  = timerDone && agreeChecked;
 
   return (
     <div style={{ minHeight: "100vh", background: "#f7f8fa", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: SANS, padding: "2rem 1rem", overflow: "auto" }}>
@@ -231,23 +220,10 @@ function AntiCheatScreen({ session, agreeChecked, setAgreeChecked, onBegin }) {
           </span>
         </label>
 
-        {/* Reading countdown */}
-        <div style={{ textAlign: "center", marginBottom: "1.25rem", padding: "14px 16px", background: timerDone ? "#f0fdf4" : "#fff7f0", border: `1px solid ${timerDone ? "#86efac" : "#fcd9a0"}`, borderRadius: 10 }}>
-          {timerDone ? (
-            <span style={{ fontSize: 14, fontWeight: 600, color: "#16a34a" }}>
-              ✓ Reading time complete — you may now begin.
-            </span>
-          ) : (
-            <span style={{ fontSize: 14, fontWeight: 600, color: "#b45309" }}>
-              Please read the case study: <span style={{ fontVariantNumeric: "tabular-nums", fontFamily: "monospace", fontSize: 16 }}>{formatTime(countdown)}</span> remaining
-            </span>
-          )}
-        </div>
-
         <button
           onClick={onBegin}
-          disabled={!canBegin}
-          style={btn(canBegin ? CCM_RED : "#ccc", "#fff", { width: "100%", cursor: canBegin ? "pointer" : "not-allowed", fontSize: 16, padding: "14px 22px" })}
+          disabled={!agreeChecked}
+          style={btn(agreeChecked ? CCM_RED : "#ccc", "#fff", { width: "100%", cursor: agreeChecked ? "pointer" : "not-allowed", fontSize: 16, padding: "14px 22px" })}
         >
           Begin Assessment
         </button>
@@ -290,7 +266,9 @@ function DoneScreen({ completionTimeSec }) {
 }
 
 // ─── Scenario Panel (left) ────────────────────────────────────────────────────
-function ScenarioPanel({ scenario, moduleTitle, moduleIdx, moduleCount, assessPhase }) {
+function ScenarioPanel({ scenario, moduleTitle, moduleIdx, moduleCount, assessPhase, readingTimeLeft }) {
+  const readingDone = readingTimeLeft <= 0;
+
   if (!scenario?.case_study_text && assessPhase !== "presentation") {
     return (
       <div style={{ padding: "3rem 2rem", color: "#bbb", fontSize: 14, textAlign: "center" }}>
@@ -300,7 +278,38 @@ function ScenarioPanel({ scenario, moduleTitle, moduleIdx, moduleCount, assessPh
   }
 
   return (
-    <div style={{ padding: "2rem" }}>
+    <div>
+      {/* Reading timer banner — sticky at the top of the left panel */}
+      <div style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 10,
+        padding: "10px 1.5rem",
+        background: readingDone ? "#f0fdf4" : "#fffbeb",
+        borderBottom: `1px solid ${readingDone ? "#86efac" : "#fde68a"}`,
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+      }}>
+        {readingDone ? (
+          <>
+            <span style={{ fontSize: 15 }}>✓</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#16a34a" }}>
+              Reading time complete. You may now answer.
+            </span>
+          </>
+        ) : (
+          <>
+            <span style={{ fontSize: 15 }}>📖</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "#92400e" }}>
+              Please read the case study before answering. Time remaining:{" "}
+              <span style={{ fontFamily: "monospace", fontSize: 14 }}>{formatTime(readingTimeLeft)}</span>
+            </span>
+          </>
+        )}
+      </div>
+
+      <div style={{ padding: "2rem" }}>
       <div style={{ fontSize: 11, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, marginBottom: 6 }}>
         Module {moduleIdx + 1} of {moduleCount}{assessPhase === "presentation" ? " · Presentation" : ""}
       </div>
@@ -349,12 +358,13 @@ function ScenarioPanel({ scenario, moduleTitle, moduleIdx, moduleCount, assessPh
           )}
         </>
       )}
+      </div>
     </div>
   );
 }
 
 // ─── Question Panel (right) ───────────────────────────────────────────────────
-function QuestionPanel({ questions, currentQIdx, setCurrentQIdx, answers, setAnswers, moduleType, onProceedToPresentation, onSubmit }) {
+function QuestionPanel({ questions, currentQIdx, setCurrentQIdx, answers, setAnswers, moduleType, onProceedToPresentation, onSubmit, readingLocked }) {
   const q = questions[currentQIdx];
   const isLast = currentQIdx === questions.length - 1;
 
@@ -399,12 +409,19 @@ function QuestionPanel({ questions, currentQIdx, setCurrentQIdx, answers, setAns
           </p>
 
           <textarea
-            style={{ ...TEXTAREA, minHeight: 200 }}
+            style={{ ...TEXTAREA, minHeight: 200, opacity: readingLocked ? 0.45 : 1, cursor: readingLocked ? "not-allowed" : "text" }}
             value={answers[q.id] || ""}
-            onChange={e => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+            onChange={e => !readingLocked && setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
             onPaste={handlePaste}
-            placeholder="Type your answer here… (copy and paste is disabled)"
+            disabled={readingLocked}
+            placeholder={readingLocked ? "Answer unlocks after reading time ends" : "Type your answer here… (copy and paste is disabled)"}
           />
+
+          {readingLocked && (
+            <div style={{ marginTop: 8, fontSize: 12, color: "#b45309", fontWeight: 600, textAlign: "center" }}>
+              Answer unlocks after reading time ends
+            </div>
+          )}
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1.25rem", gap: 12 }}>
             <button
@@ -417,7 +434,11 @@ function QuestionPanel({ questions, currentQIdx, setCurrentQIdx, answers, setAns
 
             <div style={{ display: "flex", gap: 10 }}>
               {!isLast && (
-                <button onClick={() => setCurrentQIdx(i => Math.min(questions.length - 1, i + 1))} style={btn(CCM_RED, "#fff")}>
+                <button
+                  onClick={() => !readingLocked && setCurrentQIdx(i => Math.min(questions.length - 1, i + 1))}
+                  disabled={readingLocked}
+                  style={btn(readingLocked ? "#ccc" : CCM_RED, "#fff", { cursor: readingLocked ? "not-allowed" : "pointer" })}
+                >
                   Next →
                 </button>
               )}
@@ -549,10 +570,13 @@ export default function ParticipantApp() {
   const [tabSwitches, setTabSwitches]     = useState(0);
   const [showTabWarning, setShowTabWarning] = useState(false);
 
-  // Timer
+  // Assessment timer
   const [timeLeft, setTimeLeft]       = useState(null);
   const [timerActive, setTimerActive] = useState(false);
   const startTimeRef = useRef(null);
+
+  // Reading countdown (per-module, starts when assessment begins)
+  const [readingTimeLeft, setReadingTimeLeft] = useState(0);
 
   // Submission
   const [showSubmitModal, setShowSubmitModal] = useState(false);
@@ -657,6 +681,14 @@ export default function ParticipantApp() {
     startTimeRef.current = Date.now();
   }
 
+  // ── Reading countdown ─────────────────────────────────────────────────────────
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (readingTimeLeft <= 0) return;
+    const id = setTimeout(() => setReadingTimeLeft(t => t - 1), 1000);
+    return () => clearTimeout(id);
+  }, [readingTimeLeft]);
+
   // ── Login ─────────────────────────────────────────────────────────────────────
   async function handleLogin(e) {
     e.preventDefault();
@@ -723,6 +755,7 @@ export default function ParticipantApp() {
     const mt  = mod?.module_type || "questions";
     setAssessPhase(mt === "presentation" ? "presentation" : "questions");
     startModuleTimer(mod);
+    setReadingTimeLeft(READING_SECONDS);
   }
 
   // ── Submit module ─────────────────────────────────────────────────────────────
@@ -750,6 +783,7 @@ export default function ParticipantApp() {
         const mt = nextMod?.module_type || "questions";
         setAssessPhase(mt === "presentation" ? "presentation" : "questions");
         startModuleTimer(nextMod);
+        setReadingTimeLeft(READING_SECONDS);
       } else {
         setTimerActive(false);
         setScreen("done");
@@ -852,6 +886,7 @@ export default function ParticipantApp() {
             moduleIdx={currentModuleIdx}
             moduleCount={modules.length}
             assessPhase={assessPhase}
+            readingTimeLeft={readingTimeLeft}
           />
         </div>
 
@@ -947,6 +982,7 @@ export default function ParticipantApp() {
               answers={answers}
               setAnswers={setAnswers}
               moduleType={mt}
+              readingLocked={readingTimeLeft > 0}
               onProceedToPresentation={() => setAssessPhase("presentation")}
               onSubmit={() => setShowSubmitModal(true)}
             />
