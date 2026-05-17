@@ -490,7 +490,7 @@ export async function saveResult(participantId, moduleId, answers, timeSpent, si
     completed_at:   now(),
     sim_messages:   simMessages || [],
     updated_at:     now(),
-  });
+  }, "?on_conflict=participant_id,module_id");
 }
 
 export async function saveRatings(participantId, moduleId, ratings, aiRatings, reportData) {
