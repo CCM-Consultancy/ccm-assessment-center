@@ -497,6 +497,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
         case_study_id: mbCsId,
         title:         mbNewName.trim(),
         display_order: mbModules.length,
+        module_type:   "questions",
       });
       const newMods = [...mbModules, mod];
       setMbModules(newMods);
