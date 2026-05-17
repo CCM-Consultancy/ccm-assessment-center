@@ -257,6 +257,10 @@ export async function saveModule(data) {
   return first(await q("cs_modules", "POST", { created_at: now(), ...data }));
 }
 
+export async function saveModuleTimeSettings(id, data) {
+  return first(await q("cs_modules", "PATCH", { ...data, updated_at: now() }, `?id=eq.${id}`));
+}
+
 export async function deleteModule(id) {
   await q("cs_modules", "DELETE", null, `?id=eq.${id}`);
 }

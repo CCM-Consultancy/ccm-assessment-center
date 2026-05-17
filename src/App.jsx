@@ -77,6 +77,9 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const emptyScenForm = { case_study_text:"", appendix_text:"", image_1_url:"", image_1_caption:"", image_2_url:"", image_2_caption:"", image_3_url:"", image_3_caption:"", file_url:"", file_name:"", file_type:"" };
   const [mbScenForm,     setMbScenForm]     = useState({ ...emptyScenForm });
   const [mbLevelIds,     setMbLevelIds]     = useState([]);
+  const emptyTimeForm = { reading_time_mins:5, sup_q_mins:45, sup_task_mins:30, mgr_q_mins:60, mgr_task_mins:45, dir_q_mins:75, dir_task_mins:60 };
+  const [mbTimeForm,     setMbTimeForm]     = useState({ ...emptyTimeForm });
+  const [mbTimeSaving,   setMbTimeSaving]   = useState(false);
   const [mbLoading,      setMbLoading]      = useState(false);
   const [mbSaving,       setMbSaving]       = useState(false);
   const [mbUploading,    setMbUploading]    = useState(null); // "image_1"|"image_2"|"image_3"|"document"|null
@@ -459,6 +462,15 @@ const [editCompSaving, setEditCompSaving] = useState(false);
     setMbScenEditing(false);
     const mod = mbModules.find(m => m.id === moduleId);
     setMbModForm({ name: mod?.title || "", module_type: mod?.module_type || "questions" });
+    setMbTimeForm({
+      reading_time_mins: mod?.reading_time_mins ?? 5,
+      sup_q_mins:        mod?.sup_q_mins        ?? 45,
+      sup_task_mins:     mod?.sup_task_mins      ?? 30,
+      mgr_q_mins:        mod?.mgr_q_mins         ?? 60,
+      mgr_task_mins:     mod?.mgr_task_mins      ?? 45,
+      dir_q_mins:        mod?.dir_q_mins         ?? 75,
+      dir_task_mins:     mod?.dir_task_mins      ?? 60,
+    });
     const levelIds = mbModuleLevels.filter(ml => ml.module_id === moduleId).map(ml => ml.level_id);
     setMbLevelIds(levelIds);
     const scen = mbScenarios.find(s => s.module_id === moduleId);
@@ -534,6 +546,17 @@ const [editCompSaving, setEditCompSaving] = useState(false);
       notify("Module saved.");
     } catch(e) { notify(`Save failed: ${e.message}`); }
     setMbSaving(false);
+  }
+
+  async function saveModuleTimeSettings() {
+    if (!mbSelModId) return;
+    setMbTimeSaving(true);
+    try {
+      const saved = await db.saveModuleTimeSettings(mbSelModId, mbTimeForm);
+      if (saved) setMbModules(prev => prev.map(m => m.id === mbSelModId ? { ...m, ...saved } : m));
+      notify("Time settings saved.");
+    } catch(e) { notify(`Save failed: ${e.message}`); }
+    setMbTimeSaving(false);
   }
 
   async function deleteMbModule(moduleId) {
@@ -1485,6 +1508,41 @@ ${compsHtml}
                           </>
                         : <span style={{ fontSize:12, color:"#ccc" }}>No document</span>
                       }
+                    </div>
+                  </div>
+
+                  {/* Time Settings */}
+                  <div style={{ ...S.card, marginBottom:"1.5rem" }}>
+                    <h3 style={{ margin:"0 0 4px", fontSize:15 }}>Time Settings</h3>
+                    <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:16 }}>
+                      All values in minutes. Set per-level time limits for questions and tasks.
+                    </p>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px 24px" }}>
+                      {[
+                        { key:"reading_time_mins", label:"Reading time (all levels)" },
+                        { key:"sup_q_mins",        label:"Supervisor — Behavioural Qs" },
+                        { key:"sup_task_mins",     label:"Supervisor — Tasks" },
+                        { key:"mgr_q_mins",        label:"Manager — Behavioural Qs" },
+                        { key:"mgr_task_mins",     label:"Manager — Tasks" },
+                        { key:"dir_q_mins",        label:"Director — Behavioural Qs" },
+                        { key:"dir_task_mins",     label:"Director — Tasks" },
+                      ].map(({ key, label }) => (
+                        <div key={key}>
+                          <label style={S.label}>{label}</label>
+                          <input
+                            type="number"
+                            min="1"
+                            style={{ ...S.input, width:100 }}
+                            value={mbTimeForm[key]}
+                            onChange={e => setMbTimeForm(f => ({ ...f, [key]: Number(e.target.value) || 0 }))}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ marginTop:18 }}>
+                      <button onClick={saveModuleTimeSettings} disabled={mbTimeSaving} style={S.btn(CCM_RED,"#fff",{ opacity:mbTimeSaving?0.6:1 })}>
+                        {mbTimeSaving ? "Saving…" : "Save Time Settings"}
+                      </button>
                     </div>
                   </div>
 
