@@ -549,6 +549,7 @@ export default function ParticipantApp() {
   const currentModule = modules[currentModuleIdx] || null;
 
   // ── Auto-login from localStorage on mount ────────────────────────────────────
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const savedUser = localStorage.getItem(LS_USER);
     const savedPass = localStorage.getItem(LS_PASS);
@@ -568,9 +569,10 @@ export default function ParticipantApp() {
       }
       setLoginLoading(false);
     })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Drag-to-resize panel ─────────────────────────────────────────────────────
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     function onMove(e) {
       if (!isDragging.current || !containerRef.current) return;
