@@ -570,13 +570,12 @@ export default function ParticipantApp() {
   const [tabSwitches, setTabSwitches]     = useState(0);
   const [showTabWarning, setShowTabWarning] = useState(false);
 
-  // Assessment timer
-  const [timeLeft, setTimeLeft]       = useState(null);
-  const [timerActive, setTimerActive] = useState(false);
-  const startTimeRef = useRef(null);
-
-  // Reading countdown (per-module, starts when assessment begins)
+  // Timers — single interval derives both displays from one shared start timestamp
+  const [timeLeft, setTimeLeft]           = useState(null);
   const [readingTimeLeft, setReadingTimeLeft] = useState(0);
+  const [timerActive, setTimerActive]     = useState(false);
+  const startTimeRef    = useRef(null); // Date.now() when module began
+  const moduleDurationRef = useRef(0);  // total module seconds
 
   // Submission
   const [showSubmitModal, setShowSubmitModal] = useState(false);
@@ -662,32 +661,28 @@ export default function ParticipantApp() {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [screen]);
 
-  // ── Countdown timer ───────────────────────────────────────────────────────────
+  // ── Unified timer — one interval, both countdowns derived from shared timestamp ─
   useEffect(() => {
     if (!timerActive) return;
     const interval = setInterval(() => {
-      setTimeLeft(t => {
-        if (t === null || t <= 1) { clearInterval(interval); setTimerActive(false); return 0; }
-        return t - 1;
-      });
+      const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+      const newTimeLeft    = Math.max(0, moduleDurationRef.current - elapsed);
+      const newReadingLeft = Math.max(0, READING_SECONDS - elapsed);
+      setTimeLeft(newTimeLeft);
+      setReadingTimeLeft(newReadingLeft);
+      if (newTimeLeft <= 0) { clearInterval(interval); setTimerActive(false); }
     }, 1000);
     return () => clearInterval(interval);
   }, [timerActive]);
 
   function startModuleTimer(mod) {
     const minutes = mod?.time_limit || 60;
-    setTimeLeft(minutes * 60);
-    setTimerActive(true);
+    moduleDurationRef.current = minutes * 60;
     startTimeRef.current = Date.now();
+    setTimeLeft(minutes * 60);
+    setReadingTimeLeft(READING_SECONDS);
+    setTimerActive(true);
   }
-
-  // ── Reading countdown ─────────────────────────────────────────────────────────
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (readingTimeLeft <= 0) return;
-    const id = setTimeout(() => setReadingTimeLeft(t => t - 1), 1000);
-    return () => clearTimeout(id);
-  }, [readingTimeLeft]);
 
   // ── Login ─────────────────────────────────────────────────────────────────────
   async function handleLogin(e) {
@@ -741,6 +736,7 @@ export default function ParticipantApp() {
     setPresentationAnswers({});
     setUploadedFileUrl(null);
     setTimeLeft(null);
+    setReadingTimeLeft(0);
     setTimerActive(false);
     tabSwitchesRef.current = 0;
     setTabSwitches(0);
@@ -755,7 +751,6 @@ export default function ParticipantApp() {
     const mt  = mod?.module_type || "questions";
     setAssessPhase(mt === "presentation" ? "presentation" : "questions");
     startModuleTimer(mod);
-    setReadingTimeLeft(READING_SECONDS);
   }
 
   // ── Submit module ─────────────────────────────────────────────────────────────
@@ -783,7 +778,6 @@ export default function ParticipantApp() {
         const mt = nextMod?.module_type || "questions";
         setAssessPhase(mt === "presentation" ? "presentation" : "questions");
         startModuleTimer(nextMod);
-        setReadingTimeLeft(READING_SECONDS);
       } else {
         setTimerActive(false);
         setScreen("done");
