@@ -73,7 +73,7 @@ const [newCompSaving,  setNewCompSaving]  = useState(false);
 const [editCompId,     setEditCompId]     = useState(null);
 const [editCompForm,   setEditCompForm]   = useState({ name:"", category:"", definition:"", observed_in:"" });
 const [editCompSaving, setEditCompSaving] = useState(false);
-  const [mbModForm,      setMbModForm]      = useState({ name:"", module_type:"questions" });
+  const [mbModForm,      setMbModForm]      = useState({ name:"", module_type:"questions", task_brief:"" });
   const emptyScenForm = { case_study_text:"", appendix_text:"", image_1_url:"", image_1_caption:"", image_2_url:"", image_2_caption:"", image_3_url:"", image_3_caption:"", file_url:"", file_name:"", file_type:"" };
   const [mbScenForm,     setMbScenForm]     = useState({ ...emptyScenForm });
   const [mbLevelIds,     setMbLevelIds]     = useState([]);
@@ -461,7 +461,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
     setMbSelModId(moduleId);
     setMbScenEditing(false);
     const mod = mbModules.find(m => m.id === moduleId);
-    setMbModForm({ name: mod?.title || "", module_type: mod?.module_type || "questions" });
+    setMbModForm({ name: mod?.title || "", module_type: mod?.module_type || "questions", task_brief: mod?.task_brief || "" });
     setMbTimeForm({
       reading_time_mins: mod?.reading_time_mins ?? 5,
       sup_q_mins:        mod?.sup_q_mins        ?? 45,
@@ -504,7 +504,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
       setMbNewName("");
       // Select the new module
       setMbSelModId(mod.id);
-      setMbModForm({ name: mod.title || "", module_type: "questions" });
+      setMbModForm({ name: mod.title || "", module_type: "questions", task_brief: "" });
       setMbLevelIds([]);
       setMbScenForm({ ...emptyScenForm });
       notify("Module added.");
@@ -525,6 +525,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
         title:         mbModForm.name.trim(),
         display_order: mod?.display_order ?? 0,
         module_type:   mbModForm.module_type || "questions",
+        task_brief:    mbModForm.task_brief  || "",
       });
       // 2. Save level access
       await db.saveModuleLevels(mbSelModId, mbLevelIds);
@@ -1442,6 +1443,20 @@ ${compsHtml}
                         </div>
                       )}
                     </div>
+                  </div>
+
+                  {/* Case Study Tasks (Part 2 brief) */}
+                  <div style={{ ...S.card, marginBottom:"1.5rem" }}>
+                    <h3 style={{ margin:"0 0 4px", fontSize:15 }}>Case Study Tasks</h3>
+                    <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:12 }}>
+                      The numbered tasks participants must complete in Part 2. Displayed verbatim in the participant's task panel.
+                    </p>
+                    <textarea
+                      style={{ ...S.textarea, height:180 }}
+                      value={mbModForm.task_brief}
+                      onChange={e => setMbModForm(f => ({ ...f, task_brief: e.target.value }))}
+                      placeholder={"1) Develop a SWOT analysis based on the case study.\n2) Prepare a 3-year recovery plan.\n3) How would you allocate the budget?\n4) What observations do you have about the financial results?"}
+                    />
                   </div>
 
                   {/* Images */}

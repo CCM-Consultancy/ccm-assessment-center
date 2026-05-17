@@ -574,7 +574,7 @@ function PresentationPanel({ presentationAnswers, setPresentationAnswers, upload
 }
 
 // ─── Part 2 Panel (right) ─────────────────────────────────────────────────────
-function Part2Panel({ answer, setAnswer, fileUrl, uploading, onUpload, onSubmit }) {
+function Part2Panel({ answer, setAnswer, fileUrl, uploading, onUpload, onSubmit, taskBrief }) {
   const fileInputRef = useRef(null);
   function handlePaste(e) { e.preventDefault(); }
 
@@ -583,9 +583,9 @@ function Part2Panel({ answer, setAnswer, fileUrl, uploading, onUpload, onSubmit 
       <div style={{ fontSize: 11, fontWeight: 700, color: CCM_RED, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>
         Case Study Tasks
       </div>
-      <p style={{ fontSize: 14, color: "#555", lineHeight: 1.7, margin: "0 0 1.5rem", padding: "12px 16px", background: "#f8f9fb", borderRadius: 10, border: "1px solid #eee" }}>
-        Using the case study, complete the tasks outlined in the brief. Provide your written response below and upload any supporting documents.
-      </p>
+      <div style={{ fontSize: 14, color: "#333", lineHeight: 1.8, margin: "0 0 1.5rem", padding: "14px 16px", background: "#f8f9fb", borderRadius: 10, border: "1px solid #e8e8e8", whiteSpace: "pre-wrap" }}>
+        {taskBrief || "Complete the tasks outlined in the case study on the left."}
+      </div>
 
       <textarea
         style={{ ...TEXTAREA, minHeight: 280 }}
@@ -1154,6 +1154,7 @@ export default function ParticipantApp() {
               uploading={part2Uploading}
               onUpload={handlePart2Upload}
               onSubmit={() => setShowSubmitModal(true)}
+              taskBrief={currentModule?.task_brief || ""}
             />
           )}
         </div>
