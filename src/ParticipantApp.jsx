@@ -593,7 +593,7 @@ export default function ParticipantApp() {
     setLoginError("");
     setLoginLoading(true);
 
-    let p;
+    let p = null;
     try {
       p = await db.loginParticipant(username, password);
     } catch (err) {
@@ -602,7 +602,7 @@ export default function ParticipantApp() {
       return;
     }
 
-    if (!p) {
+    if (!p || !p.id) {
       setLoginError("Invalid username or password. Please try again.");
       setLoginLoading(false);
       return;
@@ -615,6 +615,8 @@ export default function ParticipantApp() {
       setScreen("antiCheat");
     } catch (err) {
       setLoginError("Your account was found but your assessment session could not be loaded. Please contact your administrator.");
+      setLoginLoading(false);
+      return;
     }
     setLoginLoading(false);
   }
