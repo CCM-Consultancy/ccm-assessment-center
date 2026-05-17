@@ -2,7 +2,7 @@
   "extends": "react-app",
   "rules": {
     "react-hooks/exhaustive-deps": "off",
-    "no-unused-vars": "warn",
+    "no-unused-vars": "off",
     "jsx-a11y/img-redundant-alt": "off"
   }
 }

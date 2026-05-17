@@ -22,40 +22,6 @@ function Toast({ msg }) {
   );
 }
 
-// ─── Keyword chip editor ───────────────────────────────────────────────────────
-function KeywordEditor({ keywords, onChange }) {
-  const [input, setInput] = useState("");
-  function add() {
-    const kw = input.trim().toLowerCase();
-    if (kw && !keywords.includes(kw)) onChange([...keywords, kw]);
-    setInput("");
-  }
-  function remove(kw) { onChange(keywords.filter(k => k !== kw)); }
-  return (
-    <div>
-      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:6 }}>
-        {keywords.map(kw => (
-          <span key={kw} style={{ background:"#f0f0f0", border:"1px solid #ddd", borderRadius:20, padding:"2px 10px", fontSize:12, display:"flex", alignItems:"center", gap:4 }}>
-            {kw}
-            <button onClick={() => remove(kw)} style={{ background:"none", border:"none", cursor:"pointer", color:"#888", fontSize:14, lineHeight:1, padding:0 }}>×</button>
-          </span>
-        ))}
-        {keywords.length === 0 && <span style={{ fontSize:12, color:"#aaa" }}>No keywords yet</span>}
-      </div>
-      <div style={{ display:"flex", gap:6 }}>
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && add()}
-          placeholder="Type keyword, press Enter"
-          style={{ ...S.input, width:220, fontSize:12 }}
-        />
-        <button onClick={add} style={S.btn("#111","#fff",{ fontSize:12, padding:"6px 14px" })}>Add</button>
-      </div>
-    </div>
-  );
-}
-
 // ─── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
  
@@ -72,7 +38,6 @@ export default function App() {
 
   const [csForm, setCsForm]       = useState({ name:"", industry:"", description:"", is_active:false });
   const [levelForm, setLevelForm] = useState({ name:"", complexity_tier:"standard" });
-  const [compForm, setCompForm]   = useState({ name:"", keywords:[] });
 
   const [adminTab, setAdminTab] = useState("case-studies");
 
@@ -131,7 +96,6 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const [guideOpen,   setGuideOpen]   = useState(null); // question_id being edited
   const emptyGuide = { model_answer:"", best_answer:"", strong_indicators:"", weak_indicators:"" };
   const [guideForm,   setGuideForm]   = useState({ ...emptyGuide });
-  const [guideSaving, setGuideSaving] = useState(false);
   // AI question suggestions
   const [aiPanelOpen,   setAiPanelOpen]   = useState(false); // controlled separately from load state
   const [aiSuggestions, setAiSuggestions] = useState([]); // [{advanced, standard}]
@@ -291,31 +255,6 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   }
 
   // ─── Competencies ─────────────────────────────────────────────────────────────
-  async function addCompetency() {
-    if (!compForm.name.trim()) { notify("Competency name required."); return; }
-    if (!selectedId || selectedId === "new") { notify("Save the case study first."); return; }
-    try {
-      await db.saveCompetency({
-        case_study_id: selectedId,
-        name:          compForm.name.trim(),
-        keywords:      compForm.keywords,
-        display_order: (csData?.competencies?.length || 0),
-      });
-      setCompForm({ name:"", keywords:[] });
-      await reloadCsData();
-      notify("Competency added.");
-    } catch { notify("Failed to add competency."); }
-  }
-
-  async function removeCompetency(id) {
-    if (!window.confirm("Delete this competency? Questions linked to it will break.")) return;
-    try {
-      await db.deleteCompetency(id);
-      await reloadCsData();
-      notify("Competency removed.");
-    } catch { notify("Cannot delete — questions may reference this competency."); }
-  }
-
   async function updateKeywords(compId, keywords) {
     try {
       const comp = csData.competencies.find(c => c.id === compId);
@@ -844,7 +783,6 @@ async function deleteLibComp(id) {
   }
 
   async function saveQgGuide(questionId) {
-    setGuideSaving(true);
     try {
       const existing = (qgData?.guide || []).find(g => g.question_id === questionId);
       await db.saveGuide({
@@ -859,7 +797,6 @@ async function deleteLibComp(id) {
       setGuideOpen(null);
       notify("Assessor guide saved.");
     } catch(e) { notify(`Save failed: ${e.message}`); }
-    setGuideSaving(false);
   }
 
   // ─── Case study competency assignment ─────────────────────────────────────────
