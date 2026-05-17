@@ -254,7 +254,7 @@ export async function deleteCompetency(id) {
 // ─── Modules ──────────────────────────────────────────────────────────────────
 
 export async function saveModule(data) {
-  return first(await q("cs_modules", "POST", { created_at: now(), ...data }));
+  return first(await q("cs_modules", "POST", { created_at: now(), ...data }, "?on_conflict=id"));
 }
 
 export async function saveModuleTimeSettings(id, data) {

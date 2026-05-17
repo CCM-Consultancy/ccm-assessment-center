@@ -587,6 +587,10 @@ function Part2Panel({ answer, setAnswer, fileUrl, uploading, onUpload, onSubmit,
         {taskBrief || "Complete the tasks outlined in the case study on the left."}
       </div>
 
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+        Your Response
+      </div>
+
       <textarea
         style={{ ...TEXTAREA, minHeight: 280 }}
         value={answer}
