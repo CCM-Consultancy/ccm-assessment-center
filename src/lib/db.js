@@ -535,3 +535,17 @@ export async function savePromotionRec(participantId, moduleId, recommendation) 
     updated_at:     now(),
   });
 }
+
+export async function getModules() {
+  return arr(await q("cs_modules", "GET", null, "?select=*&order=display_order.asc"));
+}
+
+export async function getQuestionsForModule(moduleId) {
+  return arr(await q("cs_questions", "GET", null,
+    `?module_id=eq.${moduleId}&select=*,competency:cs_competencies(id,name)&order=display_order.asc`));
+}
+
+export async function saveScores(participantId, moduleId, scores) {
+  return first(await q("ac_results", "PATCH", { scores, updated_at: now() },
+    `?participant_id=eq.${participantId}&module_id=eq.${moduleId}`));
+}

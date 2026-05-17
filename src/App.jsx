@@ -126,6 +126,15 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const [dbResults,  setDbResults]  = useState([]);
   const [dbLoading,  setDbLoading]  = useState(false);
 
+  // ─── Reports ──────────────────────────────────────────────────────────────────
+  const [rpResults,   setRpResults]   = useState([]);
+  const [rpModules,   setRpModules]   = useState([]);
+  const [rpLoading,   setRpLoading]   = useState(false);
+  const [rpSelKey,    setRpSelKey]    = useState(null);
+  const [rpQuestions, setRpQuestions] = useState([]);
+  const [rpScores,    setRpScores]    = useState({ part1:{}, part2:{} });
+  const [rpSaving,    setRpSaving]    = useState(false);
+
   // ─── Self-registration ────────────────────────────────────────────────────────
   const [loginMode,  setLoginMode]  = useState("signin"); // "signin" | "register"
   const [regStep,    setRegStep]    = useState("code");   // "code" | "form"
@@ -645,6 +654,19 @@ async function loadLibComps() {
 useEffect(() => {
   if (screen === "admin") loadLibComps();
 }, [screen]);
+
+useEffect(() => {
+  if (adminTab !== "reports") return;
+  (async () => {
+    setRpLoading(true);
+    try {
+      const [data, mods] = await Promise.all([db.loadAllAssessmentData(), db.getModules()]);
+      setRpResults(data.results || []);
+      setRpModules(mods || []);
+    } catch(e) { notify("Failed to load results: " + e.message); }
+    setRpLoading(false);
+  })();
+}, [adminTab]);
 
 async function generateAndAddCompetency() {
   if (!newCompForm.name.trim()) { notify("Enter a competency name first."); return; }
@@ -1188,6 +1210,30 @@ ${compsHtml}
     );
   }
 
+  async function selectRpResult(result) {
+    setRpSelKey(result.participant_id + "|" + result.module_id);
+    try {
+      const qs = await db.getQuestionsForModule(result.module_id);
+      setRpQuestions(qs);
+      const ex = result.scores || {};
+      setRpScores({ part1: ex.part1 || {}, part2: ex.part2 || {} });
+    } catch(e) { notify("Failed to load questions: " + e.message); }
+  }
+
+  async function saveRpScores() {
+    if (!rpSelKey) return;
+    const [pid, mid] = rpSelKey.split("|");
+    setRpSaving(true);
+    try {
+      await db.saveScores(pid, mid, rpScores);
+      setRpResults(prev => prev.map(r =>
+        r.participant_id === pid && r.module_id === mid ? { ...r, scores: rpScores } : r
+      ));
+      notify("✓ Scores saved.");
+    } catch(e) { notify("Save failed: " + e.message); }
+    setRpSaving(false);
+  }
+
   // ─── Admin shell ──────────────────────────────────────────────────────────────
   const levels       = csData?.levels       || [];
   const competencies = csData?.competencies || [];
@@ -1246,7 +1292,7 @@ ${compsHtml}
       </div>
 
       {/* ── Tab content ───────────────────────────────────────────────────────── */}
-      <div style={{ display: (adminTab==="case-studies"||adminTab==="module-builder"||adminTab==="questions-guide") ? "flex" : "block", height:"calc(100vh - 98px)", overflow: (adminTab==="case-studies"||adminTab==="module-builder"||adminTab==="questions-guide") ? "hidden" : "auto" }}>
+      <div style={{ display: (adminTab==="case-studies"||adminTab==="module-builder"||adminTab==="questions-guide"||adminTab==="reports") ? "flex" : "block", height:"calc(100vh - 98px)", overflow: (adminTab==="case-studies"||adminTab==="module-builder"||adminTab==="questions-guide"||adminTab==="reports") ? "hidden" : "auto" }}>
 
         {/* ── Placeholders for tabs not yet built ─────────────────────────────── */}
         {adminTab==="module-builder" && (
@@ -2797,8 +2843,338 @@ ${compsHtml}
             })()}
           </div>
         )}
-        {adminTab==="live-panel"      && <Placeholder title="Live Panel"         description="Real-time question bank for use during live interviews." />}
-        {adminTab==="reports"         && <Placeholder title="Reports"            description="AI rating, manual override, PDF download, and report approval." />}
+        {adminTab==="live-panel" && <Placeholder title="Live Panel" description="Real-time question bank for use during live interviews." />}
+
+        {adminTab==="reports" && (() => {
+          const SCORE_LABELS = {1:"Ineffective",2:"Inconsistent",3:"Effective",4:"Strong",5:"Exceptional"};
+          const SCORE_COLORS = {1:"#dc2626",2:"#ea580c",3:"#ca8a04",4:"#16a34a",5:"#0369a1"};
+
+          const participantMap = Object.fromEntries(participants.map(p => [p.id, p]));
+          const levelMap       = Object.fromEntries(allLevels.map(l => [l.id, l]));
+          const cohortMap      = Object.fromEntries(cohorts.map(c => [c.id, c]));
+          const moduleMap      = Object.fromEntries(rpModules.map(m => [m.id, m]));
+
+          const resultRows = rpResults.map(r => {
+            const part = participantMap[r.participant_id] || null;
+            return {
+              ...r,
+              participant: part,
+              level:  part ? levelMap[part.level_id]   || null : null,
+              cohort: part ? cohortMap[part.cohort_id] || null : null,
+              module: moduleMap[r.module_id] || null,
+            };
+          }).filter(r => r.participant);
+
+          const selResult = rpSelKey ? resultRows.find(r => r.participant_id + "|" + r.module_id === rpSelKey) : null;
+
+          const compGroups = {};
+          rpQuestions.forEach(q => {
+            const cId   = q.competency_id || "none";
+            const cName = q.competency?.name || "Unknown Competency";
+            if (!compGroups[cId]) compGroups[cId] = { id: cId, name: cName, questions: [] };
+            compGroups[cId].questions.push(q);
+          });
+          const compList = Object.values(compGroups);
+
+          function p1Avg(cId) {
+            const qs = (compGroups[cId] || {}).questions || [];
+            const scores = qs.map(q => rpScores.part1[q.id]).filter(s => s && !s.not_attempted && s.score);
+            if (!scores.length) return null;
+            return scores.reduce((a, s) => a + s.score, 0) / scores.length;
+          }
+          function p2Score(cId) {
+            const s = rpScores.part2[cId];
+            return (s && !s.not_attempted && s.score) ? s.score : null;
+          }
+          function compOverall(cId) {
+            const a = p1Avg(cId), b = p2Score(cId);
+            if (a !== null && b !== null) return (a + b) / 2;
+            return a ?? b ?? null;
+          }
+          const grandOverall = (() => {
+            const vals = compList.map(c => compOverall(c.id)).filter(v => v !== null);
+            return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+          })();
+          const fmt   = v => v === null ? "–" : v.toFixed(1);
+          const clamp = n => Math.min(5, Math.max(1, Math.round(n)));
+
+          function scoreInput(part, key) {
+            const s  = rpScores[part][key] || {};
+            const na = s.not_attempted || false;
+            const sc = s.score || null;
+            return (
+              <div>
+                <div style={{ display:"flex", gap:4, alignItems:"center", marginBottom:6 }}>
+                  {[1,2,3,4,5].map(n => (
+                    <button key={n}
+                      onClick={() => setRpScores(prev => ({
+                        ...prev, [part]: { ...prev[part], [key]: { ...(prev[part][key]||{}), score:n, not_attempted:false } }
+                      }))}
+                      disabled={na}
+                      style={{
+                        width:50, height:34, borderRadius:6,
+                        border:`1.5px solid ${sc===n&&!na ? SCORE_COLORS[n] : "#ddd"}`,
+                        background: sc===n&&!na ? SCORE_COLORS[n] : "#fff",
+                        color: sc===n&&!na ? "#fff" : "#555",
+                        cursor: na ? "default" : "pointer",
+                        fontSize:12, fontWeight:700, opacity: na ? 0.35 : 1,
+                      }}
+                      title={SCORE_LABELS[n]}
+                    >{n}</button>
+                  ))}
+                  {sc && !na && (
+                    <span style={{ fontSize:11, color:SCORE_COLORS[sc], fontWeight:700, marginLeft:4 }}>
+                      {SCORE_LABELS[sc]}
+                    </span>
+                  )}
+                </div>
+                <label style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:"#888", cursor:"pointer" }}>
+                  <input type="checkbox" checked={na}
+                    onChange={e => setRpScores(prev => ({
+                      ...prev, [part]: { ...prev[part], [key]: { ...(prev[part][key]||{}), not_attempted:e.target.checked, score:null } }
+                    }))} />
+                  Not Attempted
+                </label>
+              </div>
+            );
+          }
+
+          return (
+            <div style={{ display:"flex", height:"100%" }}>
+
+              {/* Left sidebar — submission list */}
+              <div style={{ width:300, borderRight:"1px solid #e5e5e5", background:"#fafafa", overflowY:"auto", flexShrink:0 }}>
+                <div style={{ padding:"14px 16px", borderBottom:"1px solid #e5e5e5", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <span style={{ fontWeight:700, fontSize:14 }}>Submissions</span>
+                  <span style={{ fontSize:11, color:"#888" }}>{resultRows.length} result{resultRows.length!==1?"s":""}</span>
+                </div>
+                {rpLoading && <p style={{ padding:"1rem", fontSize:13, color:"#888" }}>Loading…</p>}
+                {!rpLoading && resultRows.length === 0 && (
+                  <p style={{ padding:"1rem", fontSize:13, color:"#888" }}>No submissions yet.</p>
+                )}
+                {resultRows.map(r => {
+                  const key = r.participant_id + "|" + r.module_id;
+                  const sel = rpSelKey === key;
+                  const hasScores = r.scores && (Object.keys(r.scores.part1||{}).length || Object.keys(r.scores.part2||{}).length);
+                  return (
+                    <div key={key} onClick={() => selectRpResult(r)}
+                      style={{ padding:"12px 16px", borderBottom:"1px solid #f0f0f0", cursor:"pointer",
+                        background: sel ? "#fff7f7" : "transparent",
+                        borderLeft: sel ? `3px solid ${CCM_RED}` : "3px solid transparent" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                        <div style={{ fontWeight:600, fontSize:13 }}>{r.participant?.name || "Unknown"}</div>
+                        {hasScores && (
+                          <span style={{ fontSize:10, background:"#f0fdf4", color:"#16a34a", border:"1px solid #bbf7d0", borderRadius:10, padding:"2px 7px", whiteSpace:"nowrap" }}>Scored</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize:11, color:"#888", marginTop:2 }}>{r.module?.title || r.module_id}</div>
+                      <div style={{ fontSize:11, color:"#aaa", marginTop:1 }}>
+                        {[r.level?.name, r.cohort?.name].filter(Boolean).join(" · ")}
+                      </div>
+                      {r.participant?.role && (
+                        <div style={{ fontSize:11, color:"#bbb", marginTop:1 }}>{r.participant.role}</div>
+                      )}
+                      {r.completed_at && (
+                        <div style={{ fontSize:10, color:"#ccc", marginTop:3 }}>
+                          {new Date(r.completed_at).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Right — scoring panel */}
+              <div style={{ flex:1, overflowY:"auto" }}>
+                {!selResult && (
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100%", flexDirection:"column", gap:10, color:"#aaa" }}>
+                    <div style={{ fontSize:36 }}>📋</div>
+                    <div style={{ fontSize:15, color:"#888" }}>Select a submission to begin scoring</div>
+                  </div>
+                )}
+
+                {selResult && (() => {
+                  const p      = selResult.participant;
+                  const useAdv = selResult.level?.complexity_tier === "advanced";
+                  const p2     = selResult.part2_answers || null;
+
+                  return (
+                    <div style={{ padding:"1.5rem 2rem" }}>
+
+                      {/* Header */}
+                      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:"1.5rem" }}>
+                        <div>
+                          <h2 style={{ margin:"0 0 4px", fontSize:20, fontWeight:700 }}>{p?.name}</h2>
+                          <div style={{ fontSize:13, color:"#666" }}>
+                            {[p?.role, selResult.level?.name, selResult.cohort?.name].filter(Boolean).join(" · ")}
+                          </div>
+                          <div style={{ fontSize:12, color:"#aaa", marginTop:4 }}>
+                            Module: <strong style={{ color:"#555" }}>{selResult.module?.title || selResult.module_id}</strong>
+                          </div>
+                        </div>
+                        <button onClick={saveRpScores} disabled={rpSaving}
+                          style={S.btn(CCM_RED,"#fff",{ opacity:rpSaving?0.6:1 })}>
+                          {rpSaving ? "Saving…" : "Save Scores"}
+                        </button>
+                      </div>
+
+                      {/* Part 1 — behavioural questions */}
+                      <div style={{ ...S.card, marginBottom:"1.5rem" }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:CCM_RED, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"1.25rem" }}>
+                          Part 1 — Behavioural Questions
+                        </div>
+                        {compList.length === 0 && (
+                          <p style={{ fontSize:13, color:"#888", margin:0 }}>No questions found for this module.</p>
+                        )}
+                        {compList.map((comp, ci) => (
+                          <div key={comp.id} style={{ marginBottom: ci < compList.length-1 ? "2rem" : 0 }}>
+                            <div style={{ fontSize:11, fontWeight:700, color:"#555", textTransform:"uppercase",
+                              letterSpacing:"0.05em", marginBottom:"0.75rem", paddingBottom:8, borderBottom:"1px solid #f0f0f0" }}>
+                              {comp.name}
+                            </div>
+                            {comp.questions.map((q, qi) => {
+                              const ans   = (selResult.answers?.questions || {})[q.id] || "";
+                              const qText = useAdv ? (q.text_advanced || q.text_standard) : (q.text_standard || q.text_advanced);
+                              return (
+                                <div key={q.id} style={{
+                                  marginBottom: qi < comp.questions.length-1 ? "1.5rem" : 0,
+                                  paddingBottom: qi < comp.questions.length-1 ? "1.5rem" : 0,
+                                  borderBottom: qi < comp.questions.length-1 ? "1px dashed #f0f0f0" : "none",
+                                }}>
+                                  <div style={{ fontSize:13, fontWeight:600, color:"#111", marginBottom:8, lineHeight:1.5 }}>
+                                    Q{qi+1}. {qText}
+                                  </div>
+                                  {ans ? (
+                                    <div style={{ fontSize:13, color:"#333", background:"#f8f9fb", border:"1px solid #e8e8e8",
+                                      borderRadius:8, padding:"12px 14px", lineHeight:1.75, marginBottom:10, whiteSpace:"pre-wrap" }}>
+                                      {ans}
+                                    </div>
+                                  ) : (
+                                    <div style={{ fontSize:12, color:"#bbb", fontStyle:"italic", marginBottom:10 }}>No answer recorded</div>
+                                  )}
+                                  {scoreInput("part1", q.id)}
+                                  <div style={{ marginTop:8 }}>
+                                    <input style={{ ...S.input, fontSize:12 }}
+                                      placeholder="Assessor notes (optional)"
+                                      value={(rpScores.part1[q.id]||{}).notes || ""}
+                                      onChange={e => setRpScores(prev => ({
+                                        ...prev, part1: { ...prev.part1, [q.id]: { ...(prev.part1[q.id]||{}), notes:e.target.value } }
+                                      }))}
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Part 2 */}
+                      <div style={{ ...S.card, marginBottom:"1.5rem" }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:CCM_RED, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"1.25rem" }}>
+                          Part 2 — Case Study Tasks
+                        </div>
+                        {!p2 ? (
+                          <p style={{ fontSize:13, color:"#aaa", margin:0 }}>No Part 2 submission recorded.</p>
+                        ) : (<>
+                          {p2.written_response && (
+                            <div style={{ marginBottom:"1.25rem" }}>
+                              <div style={S.label}>Written Response</div>
+                              <div style={{ fontSize:13, color:"#333", background:"#f8f9fb", border:"1px solid #e8e8e8",
+                                borderRadius:8, padding:"12px 14px", lineHeight:1.8, whiteSpace:"pre-wrap" }}>
+                                {p2.written_response}
+                              </div>
+                            </div>
+                          )}
+                          {p2.uploaded_file_url && (
+                            <div style={{ marginBottom:"1.25rem" }}>
+                              <div style={S.label}>Uploaded Document</div>
+                              <a href={p2.uploaded_file_url} target="_blank" rel="noreferrer"
+                                style={{ fontSize:13, color:CCM_RED, fontWeight:600, textDecoration:"none" }}>
+                                📎 View uploaded file ↗
+                              </a>
+                            </div>
+                          )}
+                          <div style={{ borderTop:"1px solid #f0f0f0", paddingTop:"1rem" }}>
+                            <div style={{ ...S.label, marginBottom:"0.75rem" }}>Score by Competency</div>
+                            {compList.map((comp, ci) => (
+                              <div key={comp.id} style={{
+                                marginBottom: ci < compList.length-1 ? "1.25rem" : 0,
+                                paddingBottom: ci < compList.length-1 ? "1.25rem" : 0,
+                                borderBottom: ci < compList.length-1 ? "1px dashed #f0f0f0" : "none",
+                              }}>
+                                <div style={{ fontSize:12, fontWeight:600, color:"#555", marginBottom:8 }}>{comp.name}</div>
+                                {scoreInput("part2", comp.id)}
+                                <div style={{ marginTop:8 }}>
+                                  <input style={{ ...S.input, fontSize:12 }}
+                                    placeholder="Assessor notes (optional)"
+                                    value={(rpScores.part2[comp.id]||{}).notes || ""}
+                                    onChange={e => setRpScores(prev => ({
+                                      ...prev, part2: { ...prev.part2, [comp.id]: { ...(prev.part2[comp.id]||{}), notes:e.target.value } }
+                                    }))}
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </>)}
+                      </div>
+
+                      {/* Score summary table */}
+                      <div style={{ ...S.card, marginBottom:"1.5rem" }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:CCM_RED, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"1rem" }}>
+                          Score Summary
+                        </div>
+                        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+                          <thead>
+                            <tr style={{ borderBottom:"2px solid #e5e5e5" }}>
+                              {["Competency","Part 1 Avg","Part 2 Score","Overall"].map(h => (
+                                <th key={h} style={{ padding:"8px 12px", textAlign:h==="Competency"?"left":"center",
+                                  fontSize:11, fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.05em" }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {compList.map((comp, i) => {
+                              const a = p1Avg(comp.id), b = p2Score(comp.id), ov = compOverall(comp.id);
+                              return (
+                                <tr key={comp.id} style={{ background: i%2===0?"#fafafa":"#fff" }}>
+                                  <td style={{ padding:"10px 12px", fontWeight:600 }}>{comp.name}</td>
+                                  <td style={{ padding:"10px 12px", textAlign:"center",
+                                    color:a!==null?SCORE_COLORS[clamp(a)]:"#ccc", fontWeight:a!==null?600:400 }}>{fmt(a)}</td>
+                                  <td style={{ padding:"10px 12px", textAlign:"center",
+                                    color:b!==null?SCORE_COLORS[b]:"#ccc", fontWeight:b!==null?600:400 }}>{fmt(b)}</td>
+                                  <td style={{ padding:"10px 12px", textAlign:"center", fontWeight:700,
+                                    color:ov!==null?SCORE_COLORS[clamp(ov)]:"#ccc" }}>{fmt(ov)}</td>
+                                </tr>
+                              );
+                            })}
+                            <tr style={{ borderTop:"2px solid #e5e5e5" }}>
+                              <td style={{ padding:"10px 12px", fontWeight:700 }}>OVERALL</td>
+                              <td /><td />
+                              <td style={{ padding:"10px 12px", textAlign:"center", fontWeight:700, fontSize:16,
+                                color:grandOverall!==null?SCORE_COLORS[clamp(grandOverall)]:"#ccc" }}>
+                                {fmt(grandOverall)}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Bottom save */}
+                      <div style={{ display:"flex", justifyContent:"flex-end", paddingBottom:"2rem" }}>
+                        <button onClick={saveRpScores} disabled={rpSaving}
+                          style={S.btn(CCM_RED,"#fff",{ opacity:rpSaving?0.6:1, padding:"11px 28px" })}>
+                          {rpSaving ? "Saving…" : "Save Scores"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          );
+        })()}
         {adminTab==="settings"        && <Placeholder title="Settings"           description="Assessor name, client logo, and score weightings." />}
 
         {/* ── Case Studies tab ────────────────────────────────────────────────── */}
