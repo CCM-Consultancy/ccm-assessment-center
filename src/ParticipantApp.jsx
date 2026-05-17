@@ -265,6 +265,39 @@ function DoneScreen({ completionTimeSec }) {
   );
 }
 
+// ─── Part 2 Transition Screen ─────────────────────────────────────────────────
+function Part2TransitionScreen({ participant, tabSwitches, onBeginPart2, onSignOut }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: SANS }}>
+      <style>{FONTS}</style>
+      <header style={{ height: HEADER_H, background: "#fff", borderBottom: "1px solid #e8e8e8", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 1.5rem", flexShrink: 0, boxShadow: "0 1px 6px rgba(0,0,0,.05)" }}>
+        <CCMLogo />
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {tabSwitches > 0 && (
+            <div style={{ fontSize: 12, color: "#dc2626", background: "#fef2f2", padding: "4px 10px", borderRadius: 20, border: "1px solid #fca5a5", fontWeight: 600 }}>
+              ⚠ {tabSwitches} tab switch{tabSwitches !== 1 ? "es" : ""}
+            </div>
+          )}
+          <span style={{ fontSize: 13, color: "#666" }}>{participant?.name || participant?.username}</span>
+          <button onClick={onSignOut} style={btn("#fff", "#555", { fontSize: 12, padding: "6px 14px" })}>Sign out</button>
+        </div>
+      </header>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#f7f8fa", padding: "2rem" }}>
+        <div style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 16, padding: "3rem 2.5rem", maxWidth: 560, width: "100%", boxShadow: "0 4px 24px rgba(0,0,0,.06)", textAlign: "center" }}>
+          <div style={{ fontSize: 52, marginBottom: "1rem" }}>✅</div>
+          <h2 style={{ fontFamily: SERIF, fontSize: 28, margin: "0 0 1rem", color: "#111" }}>Part 1 Complete</h2>
+          <p style={{ fontSize: 15, color: "#555", lineHeight: 1.8, marginBottom: "2rem" }}>
+            You have completed the behavioural questions. Part 2 will now begin. In this section you will complete a series of tasks based on the case study. Your timer will start when you click Begin Part 2.
+          </p>
+          <button onClick={onBeginPart2} style={btn(CCM_RED, "#fff", { fontSize: 16, padding: "14px 36px", borderRadius: 10 })}>
+            Begin Part 2 →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Scenario Panel (left) ────────────────────────────────────────────────────
 function ScenarioPanel({ scenario, moduleTitle, moduleIdx, moduleCount, assessPhase, readingTimeLeft }) {
   const readingDone = readingTimeLeft <= 0;
@@ -364,7 +397,7 @@ function ScenarioPanel({ scenario, moduleTitle, moduleIdx, moduleCount, assessPh
 }
 
 // ─── Question Panel (right) ───────────────────────────────────────────────────
-function QuestionPanel({ questions, currentQIdx, setCurrentQIdx, answers, setAnswers, moduleType, onProceedToPresentation, onSubmit, readingLocked }) {
+function QuestionPanel({ questions, currentQIdx, setCurrentQIdx, answers, setAnswers, moduleType, onSubmit, readingLocked }) {
   const q = questions[currentQIdx];
   const isLast = currentQIdx === questions.length - 1;
 
@@ -442,14 +475,9 @@ function QuestionPanel({ questions, currentQIdx, setCurrentQIdx, answers, setAns
                   Next →
                 </button>
               )}
-              {isLast && moduleType === "both" && (
-                <button onClick={onProceedToPresentation} style={btn(CCM_RED, "#fff")}>
-                  Continue to Presentation →
-                </button>
-              )}
-              {isLast && moduleType !== "both" && (
-                <button onClick={onSubmit} style={btn(CCM_RED, "#fff")}>
-                  Submit Assessment
+              {isLast && (
+                <button onClick={onSubmit} style={btn(readingLocked ? "#ccc" : CCM_RED, "#fff", { cursor: readingLocked ? "not-allowed" : "pointer" })} disabled={readingLocked}>
+                  {moduleType === "both" ? "Submit Part 1" : "Submit Assessment"}
                 </button>
               )}
             </div>
@@ -545,6 +573,63 @@ function PresentationPanel({ presentationAnswers, setPresentationAnswers, upload
   );
 }
 
+// ─── Part 2 Panel (right) ─────────────────────────────────────────────────────
+function Part2Panel({ answer, setAnswer, fileUrl, uploading, onUpload, onSubmit }) {
+  const fileInputRef = useRef(null);
+  function handlePaste(e) { e.preventDefault(); }
+
+  return (
+    <div style={{ padding: "1.75rem 2rem 2.5rem" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: CCM_RED, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>
+        Case Study Tasks
+      </div>
+      <p style={{ fontSize: 14, color: "#555", lineHeight: 1.7, margin: "0 0 1.5rem", padding: "12px 16px", background: "#f8f9fb", borderRadius: 10, border: "1px solid #eee" }}>
+        Using the case study, complete the tasks outlined in the brief. Provide your written response below and upload any supporting documents.
+      </p>
+
+      <textarea
+        style={{ ...TEXTAREA, minHeight: 280 }}
+        value={answer}
+        onChange={e => setAnswer(e.target.value)}
+        onPaste={handlePaste}
+        placeholder="Type your response here… (copy and paste is disabled)"
+      />
+
+      <div style={{ marginTop: "1.5rem", marginBottom: "1.5rem" }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+          Upload Supporting Document
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.pptx,.ppt,.docx,.doc"
+          style={{ display: "none" }}
+          onChange={e => e.target.files[0] && onUpload(e.target.files[0])}
+        />
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            style={btn("#fff", "#333", { opacity: uploading ? 0.6 : 1 })}
+          >
+            {uploading ? "Uploading…" : "📎 Upload your presentation or supporting document (PDF, PPT, DOCX)"}
+          </button>
+          {fileUrl
+            ? <span style={{ fontSize: 13, color: "#16a34a", fontWeight: 600 }}>✓ File uploaded successfully</span>
+            : <span style={{ fontSize: 13, color: "#bbb" }}>No file uploaded yet</span>
+          }
+        </div>
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: "0.5rem", borderTop: "1px solid #f0f0f0" }}>
+        <button onClick={onSubmit} style={btn(CCM_RED, "#fff", { fontSize: 15 })}>
+          Submit Assessment
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Participant App ──────────────────────────────────────────────────────
 export default function ParticipantApp() {
   const [screen, setScreen] = useState("landing");
@@ -564,6 +649,11 @@ export default function ParticipantApp() {
   const [presentationAnswers, setPresentationAnswers] = useState({});
   const [uploadedFileUrl, setUploadedFileUrl]   = useState(null);
   const [uploading, setUploading]               = useState(false);
+
+  // Part 2 state
+  const [part2Answer, setPart2Answer]       = useState("");
+  const [part2FileUrl, setPart2FileUrl]     = useState(null);
+  const [part2Uploading, setPart2Uploading] = useState(false);
 
   // Anti-cheat
   const tabSwitchesRef = useRef(0);
@@ -735,6 +825,8 @@ export default function ParticipantApp() {
     setAnswers({});
     setPresentationAnswers({});
     setUploadedFileUrl(null);
+    setPart2Answer("");
+    setPart2FileUrl(null);
     setTimeLeft(null);
     setReadingTimeLeft(0);
     setTimerActive(false);
@@ -753,34 +845,88 @@ export default function ParticipantApp() {
     startModuleTimer(mod);
   }
 
+  // ── Part 2 helpers ────────────────────────────────────────────────────────────
+  function getTaskMins(mod, level) {
+    const name = (level?.name || "").toLowerCase();
+    if (name.includes("director")) return mod?.dir_task_mins ?? 60;
+    if (name.includes("manager"))  return mod?.mgr_task_mins ?? 45;
+    return mod?.sup_task_mins ?? 30;
+  }
+
+  function beginPart2() {
+    const taskMins = getTaskMins(currentModule, session?.level);
+    moduleDurationRef.current = taskMins * 60;
+    startTimeRef.current = Date.now();
+    setTimeLeft(taskMins * 60);
+    setReadingTimeLeft(0);
+    setTimerActive(true);
+    setAssessPhase("part2");
+  }
+
+  async function handlePart2Upload(file) {
+    if (!file || !participant || !currentModule) return;
+    setPart2Uploading(true);
+    try {
+      const path = `submissions/${participant.id}/${currentModule.id}/part2/${file.name}`;
+      const url  = await db.uploadStorageFile("assessment-media", path, file);
+      setPart2FileUrl(url);
+    } catch (err) {
+      alert(`Upload failed: ${err.message}`);
+    }
+    setPart2Uploading(false);
+  }
+
   // ── Submit module ─────────────────────────────────────────────────────────────
+  function advanceToNextModule() {
+    const nextIdx = currentModuleIdx + 1;
+    if (nextIdx < modules.length) {
+      const nextMod = modules[nextIdx];
+      setCurrentModuleIdx(nextIdx);
+      setCurrentQIdx(0);
+      setAnswers({});
+      setPresentationAnswers({});
+      setUploadedFileUrl(null);
+      setPart2Answer("");
+      setPart2FileUrl(null);
+      const mt = nextMod?.module_type || "questions";
+      setAssessPhase(mt === "presentation" ? "presentation" : "questions");
+      startModuleTimer(nextMod);
+    } else {
+      setTimerActive(false);
+      setScreen("done");
+    }
+  }
+
   async function submitCurrentModule() {
     if (!currentModule || submitting) return;
     setSubmitting(true);
     const timeSpent = Math.round((Date.now() - (startTimeRef.current || Date.now())) / 1000);
     setCompletionTimeSec(prev => prev + timeSpent);
     try {
-      await db.saveResult(
-        participant.id,
-        currentModule.id,
-        { questions: answers, presentation: presentationAnswers, uploaded_file_url: uploadedFileUrl, tab_switches: tabSwitchesRef.current },
-        timeSpent,
-        []
-      );
-      const nextIdx = currentModuleIdx + 1;
-      if (nextIdx < modules.length) {
-        const nextMod = modules[nextIdx];
-        setCurrentModuleIdx(nextIdx);
-        setCurrentQIdx(0);
-        setAnswers({});
-        setPresentationAnswers({});
-        setUploadedFileUrl(null);
-        const mt = nextMod?.module_type || "questions";
-        setAssessPhase(mt === "presentation" ? "presentation" : "questions");
-        startModuleTimer(nextMod);
+      if (assessPhase === "part2") {
+        // Save Part 2 answers into the existing result row
+        await db.savePart2Result(participant.id, currentModule.id, {
+          written_response:   part2Answer,
+          uploaded_file_url:  part2FileUrl,
+          time_taken:         timeSpent,
+        });
+        advanceToNextModule();
       } else {
-        setTimerActive(false);
-        setScreen("done");
+        // Part 1 — questions or standalone presentation
+        await db.saveResult(
+          participant.id,
+          currentModule.id,
+          { questions: answers, presentation: presentationAnswers, uploaded_file_url: uploadedFileUrl, tab_switches: tabSwitchesRef.current },
+          timeSpent,
+          []
+        );
+        if (assessPhase === "questions" && currentModule.module_type === "both") {
+          // Part 1 done — stop timer and show transition to Part 2
+          setTimerActive(false);
+          setAssessPhase("part2Transition");
+        } else {
+          advanceToNextModule();
+        }
       }
     } catch (err) {
       alert(`Submission failed: ${err.message}. Please try again.`);
@@ -789,7 +935,7 @@ export default function ParticipantApp() {
     setSubmitting(false);
   }
 
-  // ── File upload ───────────────────────────────────────────────────────────────
+  // ── File upload (Part 1 / presentation) ──────────────────────────────────────
   async function handleFileUpload(file) {
     if (!file || !participant || !currentModule) return;
     setUploading(true);
@@ -816,6 +962,18 @@ export default function ParticipantApp() {
   if (screen === "login")     return <LoginScreen form={loginForm} setForm={setLoginForm} error={loginError} loading={loginLoading} onSubmit={handleLogin} />;
   if (screen === "antiCheat") return <AntiCheatScreen session={session} agreeChecked={agreeChecked} setAgreeChecked={setAgreeChecked} onBegin={beginAssessment} />;
   if (screen === "done")      return <DoneScreen completionTimeSec={completionTimeSec} />;
+
+  // ── Part 2 transition ─────────────────────────────────────────────────────────
+  if (assessPhase === "part2Transition") {
+    return (
+      <Part2TransitionScreen
+        participant={participant}
+        tabSwitches={tabSwitches}
+        onBeginPart2={beginPart2}
+        onSignOut={signOut}
+      />
+    );
+  }
 
   // ── Assessment screen (split panel) ──────────────────────────────────────────
   const mt        = currentModule?.module_type || "questions";
@@ -944,24 +1102,20 @@ export default function ParticipantApp() {
                 </div>
               )}
               <span style={{ fontSize: 12, color: "#aaa", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                {assessPhase === "presentation" ? "Presentation Task" : `Q${currentQIdx + 1} / ${questions.length}`}
+                {assessPhase === "presentation" ? "Presentation Task"
+                  : assessPhase === "part2"    ? "Part 2 — Tasks"
+                  : `Q${currentQIdx + 1} / ${questions.length}`}
               </span>
             </div>
 
             {/* Submit button shortcut */}
             {assessPhase === "questions" && currentQIdx === questions.length - 1 && questions.length > 0 && (
-              <button
-                onClick={() => setShowSubmitModal(true)}
-                style={btn(CCM_RED, "#fff", { fontSize: 12, padding: "6px 14px" })}
-              >
-                Submit
+              <button onClick={() => setShowSubmitModal(true)} style={btn(CCM_RED, "#fff", { fontSize: 12, padding: "6px 14px" })}>
+                {mt === "both" ? "Submit Part 1" : "Submit"}
               </button>
             )}
-            {assessPhase === "presentation" && (
-              <button
-                onClick={() => setShowSubmitModal(true)}
-                style={btn(CCM_RED, "#fff", { fontSize: 12, padding: "6px 14px" })}
-              >
+            {(assessPhase === "presentation" || assessPhase === "part2") && (
+              <button onClick={() => setShowSubmitModal(true)} style={btn(CCM_RED, "#fff", { fontSize: 12, padding: "6px 14px" })}>
                 Submit
               </button>
             )}
@@ -977,7 +1131,6 @@ export default function ParticipantApp() {
               setAnswers={setAnswers}
               moduleType={mt}
               readingLocked={readingTimeLeft > 0}
-              onProceedToPresentation={() => setAssessPhase("presentation")}
               onSubmit={() => setShowSubmitModal(true)}
             />
           )}
@@ -989,6 +1142,17 @@ export default function ParticipantApp() {
               uploadedFileUrl={uploadedFileUrl}
               uploading={uploading}
               onUpload={handleFileUpload}
+              onSubmit={() => setShowSubmitModal(true)}
+            />
+          )}
+
+          {assessPhase === "part2" && (
+            <Part2Panel
+              answer={part2Answer}
+              setAnswer={setPart2Answer}
+              fileUrl={part2FileUrl}
+              uploading={part2Uploading}
+              onUpload={handlePart2Upload}
               onSubmit={() => setShowSubmitModal(true)}
             />
           )}
