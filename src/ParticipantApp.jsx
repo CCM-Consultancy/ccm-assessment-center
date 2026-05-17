@@ -174,9 +174,22 @@ function LoginScreen({ form, setForm, error, loading, onSubmit }) {
   );
 }
 
+const READING_SECONDS = 300; // 5 minutes
+
 // ─── Anti-Cheat Setup Screen ───────────────────────────────────────────────────
 function AntiCheatScreen({ session, agreeChecked, setAgreeChecked, onBegin }) {
   const assessmentName = session?.caseStudy?.name || "Assessment";
+  const [countdown, setCountdown] = useState(READING_SECONDS);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const id = setTimeout(() => setCountdown(c => c - 1), 1000);
+    return () => clearTimeout(id);
+  }, [countdown]);
+
+  const timerDone = countdown <= 0;
+  const canBegin  = timerDone && agreeChecked;
 
   return (
     <div style={{ minHeight: "100vh", background: "#f7f8fa", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: SANS, padding: "2rem 1rem", overflow: "auto" }}>
@@ -218,10 +231,23 @@ function AntiCheatScreen({ session, agreeChecked, setAgreeChecked, onBegin }) {
           </span>
         </label>
 
+        {/* Reading countdown */}
+        <div style={{ textAlign: "center", marginBottom: "1.25rem", padding: "14px 16px", background: timerDone ? "#f0fdf4" : "#fff7f0", border: `1px solid ${timerDone ? "#86efac" : "#fcd9a0"}`, borderRadius: 10 }}>
+          {timerDone ? (
+            <span style={{ fontSize: 14, fontWeight: 600, color: "#16a34a" }}>
+              ✓ Reading time complete — you may now begin.
+            </span>
+          ) : (
+            <span style={{ fontSize: 14, fontWeight: 600, color: "#b45309" }}>
+              Please read the case study: <span style={{ fontVariantNumeric: "tabular-nums", fontFamily: "monospace", fontSize: 16 }}>{formatTime(countdown)}</span> remaining
+            </span>
+          )}
+        </div>
+
         <button
           onClick={onBegin}
-          disabled={!agreeChecked}
-          style={btn(agreeChecked ? CCM_RED : "#ccc", "#fff", { width: "100%", cursor: agreeChecked ? "pointer" : "not-allowed", fontSize: 16, padding: "14px 22px" })}
+          disabled={!canBegin}
+          style={btn(canBegin ? CCM_RED : "#ccc", "#fff", { width: "100%", cursor: canBegin ? "pointer" : "not-allowed", fontSize: 16, padding: "14px 22px" })}
         >
           Begin Assessment
         </button>
@@ -291,6 +317,17 @@ function ScenarioPanel({ scenario, moduleTitle, moduleIdx, moduleCount, assessPh
             {scenario.case_study_text}
           </div>
 
+          {scenario.appendix_text && (
+            <div style={{ marginTop: "2rem", paddingTop: "1.5rem", borderTop: "1px solid #eee" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>
+                Appendix
+              </div>
+              <div style={{ fontSize: 13, lineHeight: 1.85, whiteSpace: "pre-wrap", color: "#444" }}>
+                {scenario.appendix_text}
+              </div>
+            </div>
+          )}
+
           {[1, 2, 3].map(n => {
             const url = scenario[`image_${n}_url`];
             const cap = scenario[`image_${n}_caption`];
@@ -302,17 +339,6 @@ function ScenarioPanel({ scenario, moduleTitle, moduleIdx, moduleCount, assessPh
               </div>
             );
           })}
-
-          {scenario.appendix_text && (
-            <div style={{ marginTop: "2rem", paddingTop: "1.5rem", borderTop: "1px solid #eee" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>
-                Appendix
-              </div>
-              <div style={{ fontSize: 13, lineHeight: 1.85, whiteSpace: "pre-wrap", color: "#444" }}>
-                {scenario.appendix_text}
-              </div>
-            </div>
-          )}
 
           {scenario.file_url && (
             <div style={{ marginTop: "1.5rem", padding: "12px 16px", background: "#f8f9fb", borderRadius: 8, border: "1px solid #e8e8e8" }}>
