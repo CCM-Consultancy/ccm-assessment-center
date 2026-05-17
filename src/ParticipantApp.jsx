@@ -584,21 +584,37 @@ export default function ParticipantApp() {
 
   async function handleLogin(e) {
     e.preventDefault();
-    if (!loginForm.username.trim() || !loginForm.password) {
+    const username = loginForm.username.trim();
+    const password = loginForm.password.trim();
+    if (!username || !password) {
       setLoginError("Please enter your username and password.");
       return;
     }
     setLoginError("");
     setLoginLoading(true);
+
+    let p;
     try {
-      const p = await db.loginParticipant(loginForm.username.trim(), loginForm.password);
-      if (!p) { setLoginError("Invalid username or password. Please try again."); setLoginLoading(false); return; }
+      p = await db.loginParticipant(username, password);
+    } catch (err) {
+      setLoginError("Could not reach the server. Please check your connection and try again.");
+      setLoginLoading(false);
+      return;
+    }
+
+    if (!p) {
+      setLoginError("Invalid username or password. Please try again.");
+      setLoginLoading(false);
+      return;
+    }
+
+    try {
       const sess = await db.loadParticipantSession(p);
       setParticipant(p);
       setSession(sess);
       setScreen("antiCheat");
     } catch (err) {
-      setLoginError("Login failed. Please check your connection and try again.");
+      setLoginError("Your account was found but your assessment session could not be loaded. Please contact your administrator.");
     }
     setLoginLoading(false);
   }
