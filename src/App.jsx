@@ -60,8 +60,6 @@ function KeywordEditor({ keywords, onChange }) {
 export default function App() {
  
   const [screen, setScreen]         = useState("login");
-  const [role,   setRole]           = useState(null);       // "admin" | "participant"
-  const [session, setSession]       = useState(null);       // loaded participant session
   const [loginForm, setLoginForm]   = useState({ username:"", password:"" });
   const [loginError, setLoginError] = useState("");
   const [loading, setLoading]       = useState(false);
@@ -415,7 +413,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
       const p = await db.loginParticipant(regForm.username.trim(), regForm.password.trim());
       if (p) {
         const sess = await db.loadParticipantSession(p);
-        setSession(sess); setRole("participant"); setScreen("participant");
+        setScreen("participant");
       } else {
         setRegError("Account created but sign-in failed. Please sign in manually.");
         setLoginMode("signin"); setRegStep("code"); setRegCode(""); setRegForm({ name:"", username:"", password:"", role:"", level_id:"" });
@@ -1506,7 +1504,7 @@ ${compsHtml}
                               </button>
                               {url
                                 ? <>
-                                    <img src={url} alt={`Image ${n}`} style={{ height:52, width:88, objectFit:"cover", borderRadius:6, border:"1px solid #ddd" }} />
+                                    <img src={url} alt="" style={{ height:52, width:88, objectFit:"cover", borderRadius:6, border:"1px solid #ddd" }} />
                                     <button onClick={() => setMbScenForm(f => ({ ...f, [urlKey]:"", [captionKey]:"" }))} style={{ background:"none", border:"none", color:"#dc2626", cursor:"pointer", fontSize:12 }}>Remove</button>
                                   </>
                                 : <span style={{ fontSize:12, color:"#bbb" }}>No image uploaded</span>
