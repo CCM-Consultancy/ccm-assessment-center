@@ -3110,12 +3110,14 @@ ${compsHtml}
             const sc = rpReport?.rpScores || rpScores;
             const qs = rpReport?.rpQuestions || rpQuestions;
             const compScoreMap = {};
+            const defByName = {};
             cl.forEach(comp => {
               const p1s = qs.filter(q=>q.competency_id===comp.id).map(q=>sc.part1?.[q.id]).filter(s=>s&&!s.not_attempted&&s.score);
               const p1a = p1s.length ? p1s.reduce((a,s)=>a+s.score,0)/p1s.length : null;
               const p2e = sc.part2?.[comp.id];
               const p2v = p2e&&!p2e.not_attempted&&p2e.score ? p2e.score : null;
               compScoreMap[comp.name] = p1a!==null&&p2v!==null ? (p1a+p2v)/2 : (p1a??p2v??null);
+              defByName[comp.name] = comp.definition || "";
             });
             return (
               <div style={{ padding:"0 0 40px" }}>
@@ -3133,7 +3135,11 @@ ${compsHtml}
                           <span style={{ fontWeight:700, fontSize:14 }}>{comp.name}</span>
                           <span style={{ fontWeight:700, fontSize:14, color: scoreColor(sc2) }}>{fmtRp(sc2)} / 5 &nbsp;<span style={{ fontSize:11, fontWeight:400 }}>{scoreLblRp(sc2)}</span></span>
                         </div>
-                        {comp.measures && <p style={{ fontSize:12, color:"#666", marginBottom:6, lineHeight:1.7, fontStyle:"italic" }}>{comp.measures}</p>}
+                        {defByName[comp.name] ? (
+                          <p style={{ fontSize:11, color:"#777", marginBottom:6, lineHeight:1.6, fontStyle:"italic", borderLeft:"3px solid #e5e7eb", paddingLeft:8 }}>{defByName[comp.name]}</p>
+                        ) : (comp.measures && (
+                          <p style={{ fontSize:11, color:"#777", marginBottom:6, lineHeight:1.6, fontStyle:"italic" }}>{comp.measures}</p>
+                        ))}
                         <p style={{ fontSize:12, color:"#333", marginBottom:6, lineHeight:1.7 }}><strong>What the candidate demonstrated: </strong>{comp.demonstrated || comp.evidence}</p>
                         <p style={{ fontSize:12, color:"#333", marginBottom:4, lineHeight:1.7 }}><strong style={{ color:"#16a34a" }}>Strength: </strong>{comp.strength}</p>
                         <p style={{ fontSize:12, color:"#333", lineHeight:1.7 }}><strong style={{ color:"#9a3412" }}>Development opportunity: </strong>{comp.developmentOpportunity}</p>
@@ -3362,21 +3368,25 @@ ${compsHtml}
           // ── Edit mode helpers ──────────────────────────────────────────────────
           function makeEmptyContent(type) {
             if (type === "individual") return {
-              executiveSummary:"", assessmentMethodology:"", howToUse:"",
+              executiveSummary:"",
+              assessmentMethodology: ai.BOILERPLATE_METHODOLOGY,
+              howToUse: ai.BOILERPLATE_HOW_TO_USE,
               competencies: compList.map(c => ({ name:c.name, measures:"", demonstrated:"", strength:"", developmentOpportunity:"" })),
               overallStrengths:"", areasForDevelopment:"",
               devPlan: { on70:[""], social20:[""], formal10:[""] },
               recommendation:"Recommended", recommendationNarrative:"",
             };
             if (type === "client") return {
-              executiveSummary:"", assessorDeclaration:"",
+              executiveSummary:"",
+              assessorDeclaration: ai.BOILERPLATE_ASSESSOR_DECLARATION,
               competencies: compList.map(c => ({ name:c.name, evidence:"", developmentPriority:"" })),
               overallStrengths:"", areasForDevelopment:"",
               devSummary: compList.map(c => ({ competency:c.name, action:"" })),
               recommendation:"Recommended", recommendationNarrative:"",
             };
             return {
-              executiveSummary:"", assessorDeclaration:"",
+              executiveSummary:"",
+              assessorDeclaration: ai.BOILERPLATE_ASSESSOR_DECLARATION,
               competencyInsights: compList.map(c => ({ name:c.name, cohortObs:"" })),
               overallStrengths:"", developmentThemes:"",
               devPriorities: [{priority:"",rationale:"",on70:"",social20:"",formal10:""},{priority:"",rationale:"",on70:"",social20:"",formal10:""},{priority:"",rationale:"",on70:"",social20:"",formal10:""}],
@@ -3417,6 +3427,19 @@ ${compsHtml}
             const updPlanArr = (f,v) => setRpEditContent(p=>({ ...p, devPlan:{ ...(p.devPlan||{}), [f]:v.split("\n").map(s=>s.trim()).filter(Boolean) } }));
             const sr = rpReport?.selResult;
             const dp = ec.devPlan || {};
+            const cl = rpReport?.compList || compList;
+            const sc = rpReport?.rpScores || rpScores;
+            const qs = rpReport?.rpQuestions || rpQuestions;
+            const compScoreMap = {};
+            const defByName = {};
+            cl.forEach(comp => {
+              const p1s = qs.filter(q=>q.competency_id===comp.id).map(q=>sc.part1?.[q.id]).filter(s=>s&&!s.not_attempted&&s.score);
+              const p1a = p1s.length ? p1s.reduce((a,s)=>a+s.score,0)/p1s.length : null;
+              const p2e = sc.part2?.[comp.id];
+              const p2v = p2e&&!p2e.not_attempted&&p2e.score ? p2e.score : null;
+              compScoreMap[comp.name] = p1a!==null&&p2v!==null ? (p1a+p2v)/2 : (p1a??p2v??null);
+              defByName[comp.name] = comp.definition || "";
+            });
             return (
               <div style={{ padding:"0 0 40px" }}>
                 {rptCoverHeader("Individual Assessment Report", sr?.participant, sr?.level, sr?.cohort, sr?.module, sr?.completed_at)}
@@ -3425,15 +3448,26 @@ ${compsHtml}
                   {rptH("2. Assessment Methodology")}{ta(ec.assessmentMethodology, v=>upd("assessmentMethodology",v), 3)}
                   {rptH("3. How to Use This Report")}{ta(ec.howToUse, v=>upd("howToUse",v), 2)}
                   {rptH("4. Competencies Measured and Scores")}
-                  {(ec.competencies||[]).map((comp,i) => (
-                    <div key={i} style={{ marginBottom:"1.5rem", padding:"16px", background:"#fafafa", borderRadius:8, border:"1px solid #ddd" }}>
-                      <div style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>{comp.name}</div>
-                      {LBL("What this competency measures (1 sentence)")}{ta(comp.measures, v=>updComp(i,"measures",v), 1)}
-                      {LBL("What the candidate demonstrated (2 sentences)")}{ta(comp.demonstrated||comp.evidence, v=>updComp(i,"demonstrated",v), 3)}
-                      {LBL("Strength","#16a34a")}{ta(comp.strength, v=>updComp(i,"strength",v), 2)}
-                      {LBL("Development Opportunity","#9a3412")}{ta(comp.developmentOpportunity, v=>updComp(i,"developmentOpportunity",v), 2)}
-                    </div>
-                  ))}
+                  {(ec.competencies||[]).map((comp,i) => {
+                    const sc2 = compScoreMap[comp.name];
+                    const def = defByName[comp.name];
+                    return (
+                      <div key={i} style={{ marginBottom:"1.5rem", padding:"16px", background:"#fafafa", borderRadius:8, border:"1px solid #ddd" }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                          <span style={{ fontWeight:700, fontSize:14 }}>{comp.name}</span>
+                          <span style={{ fontWeight:700, fontSize:13, color:scoreColor(sc2) }}>{fmtRp(sc2)} / 5 &nbsp;<span style={{ fontSize:11, fontWeight:400 }}>{scoreLblRp(sc2)}</span></span>
+                        </div>
+                        {def ? (
+                          <div style={{ fontSize:11, color:"#777", fontStyle:"italic", marginBottom:10, padding:"6px 10px", background:"#f0f4ff", borderRadius:4, lineHeight:1.6 }}>{def}</div>
+                        ) : (
+                          <div style={{ fontSize:11, color:"#bbb", fontStyle:"italic", marginBottom:10 }}>[Add competency definition in the Competencies tab]</div>
+                        )}
+                        {LBL("What the candidate demonstrated (2 sentences)")}{ta(comp.demonstrated||comp.evidence, v=>updComp(i,"demonstrated",v), 3)}
+                        {LBL("Strength","#16a34a")}{ta(comp.strength, v=>updComp(i,"strength",v), 2)}
+                        {LBL("Development Opportunity","#9a3412")}{ta(comp.developmentOpportunity, v=>updComp(i,"developmentOpportunity",v), 2)}
+                      </div>
+                    );
+                  })}
                   {rptH("5. Overall Strengths and Areas for Development")}
                   {LBL("Overall Strengths")}{ta(ec.overallStrengths, v=>upd("overallStrengths",v), 3)}
                   {LBL("Areas for Development")}{ta(ec.areasForDevelopment, v=>upd("areasForDevelopment",v), 3)}
