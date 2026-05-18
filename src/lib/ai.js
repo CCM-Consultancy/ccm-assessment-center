@@ -44,7 +44,7 @@ export async function generateAIRatings({ participant, mod, competencies, result
   const compList = competencies.map(c => `"${c.id}"`).join(",");
   const compListFull = competencies.map(c => `"${c.id}":"${c.name}"`).join(",");
 
-  const prompt = `You are an expert assessment centre analyst for CCM Consultancy. Do not use em dashes.
+  const prompt = `You are an expert assessment center analyst for CCM Consultancy. Do not use em dashes.
 
 Participant: ${participant.name}
 Role: ${participant.role || "Not specified"}
@@ -136,18 +136,18 @@ const AC_RULES = `AC Language Rules:
 - No em dashes. Formal, third-person tone.`;
 
 // Fixed boilerplate — injected into AI responses and pre-filled in manual edit mode
-export const BOILERPLATE_METHODOLOGY = "This assessment was conducted using CCM Consultancy's Assessment Centre methodology, combining structured behavioural questions and case study analysis. Competencies were assessed against standardised criteria across two components: Part 1 (Behavioural Questions) and Part 2 (Case Study Tasks), rated on a 1–5 scale where 1=Ineffective and 5=Exceptional.";
+export const BOILERPLATE_METHODOLOGY = "This assessment was conducted using CCM Consultancy's Assessment Center methodology, combining structured behavioral questions and case study analysis. Competencies were assessed against standardized criteria across two components: Part 1 (Behavioral Questions) and Part 2 (Case Study Tasks), rated on a 1–5 scale where 1=Ineffective and 5=Exceptional.";
 
-export const BOILERPLATE_HOW_TO_USE = "This report provides the results of the Assessment Centre, along with scores, behavioural evidence, and a development plan for each competency assessed. It is intended to support a feedback conversation between the assessor and the participant. The development plan should be discussed and agreed upon collaboratively. Scores reflect observed behaviour during the assessment and should be considered alongside other performance data.";
+export const BOILERPLATE_HOW_TO_USE = "This report provides the results of the Assessment Center, along with scores, behavioral evidence, and a development plan for each competency assessed. It is intended to support a feedback conversation between the assessor and the participant. The development plan should be discussed and agreed upon collaboratively. Scores reflect observed behavior during the assessment and should be considered alongside other performance data.";
 
-export const BOILERPLATE_ASSESSOR_DECLARATION = "This report was produced by CCM Consultancy following a structured Assessment Centre process. All ratings reflect assessor judgment based on observed behavioural evidence collected during the assessment. This report is confidential and intended solely for the use of the commissioning organisation.";
+export const BOILERPLATE_ASSESSOR_DECLARATION = "This report was produced by CCM Consultancy following a structured Assessment Center process. All ratings reflect assessor judgment based on observed behavioral evidence collected during the assessment. This report is confidential and intended solely for the use of the commissioning organization.";
 
 export async function generateIndividualReport({ participant, level, cohort, module, questions, compList, scores, answers, part2Answers, completedAt }) {
   const compScores = buildCompScores(compList, questions, scores, answers, part2Answers, level);
   const overallVals = compScores.map(c => c.overall).filter(v => v !== null);
   const overallScore = overallVals.length ? overallVals.reduce((a, b) => a + b, 0) / overallVals.length : null;
 
-  const header = `You are an expert Assessment Centre report writer for CCM Consultancy. ${AC_RULES}
+  const header = `You are an expert Assessment Center report writer for CCM Consultancy. ${AC_RULES}
 
 PARTICIPANT: ${participant.name} | Role: ${participant.role || "Not specified"} | Level: ${level?.name || "Not specified"} | Cohort: ${cohort?.name || "Not specified"} | Module: ${module?.name || module?.title || "Assessment Module"} | Date: ${completedAt ? new Date(completedAt).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB")} | Overall Score: ${overallScore ? overallScore.toFixed(1) : "N/A"}
 
@@ -158,7 +158,7 @@ ${compScores.map(c => `[${c.name}] Score: ${c.overall ? c.overall.toFixed(1) : "
   const prompt1 = `${header}
 
 Return ONLY valid JSON:
-{"executiveSummary":"3-4 sentences tailored to this participant","competencies":[{"name":"exact competency name","measures":"1 sentence on what this competency measures as a leadership behaviour","demonstrated":"2 sentences of specific behavioural evidence using AC language — The candidate demonstrated...","strength":"1 sentence on observed strength","developmentOpportunity":"1 sentence on development area"}]}`;
+{"executiveSummary":"3-4 sentences tailored to this participant","competencies":[{"name":"exact competency name","measures":"1 sentence on what this competency measures as a leadership behavior","demonstrated":"2 sentences of specific behavioral evidence using AC language — The candidate demonstrated...","strength":"1 sentence on observed strength","developmentOpportunity":"1 sentence on development area"}]}`;
 
   const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 1500 });
   if (!text1) throw new Error("No AI response (call 1)");
@@ -187,9 +187,9 @@ export async function generateClientReport({ participant, level, cohort, module,
   const overallVals = compScores.map(c => c.overall).filter(v => v !== null);
   const overallScore = overallVals.length ? overallVals.reduce((a, b) => a + b, 0) / overallVals.length : null;
 
-  const prompt = `You are an expert Assessment Centre report writer for CCM Consultancy. ${AC_RULES}
+  const prompt = `You are an expert Assessment Center report writer for CCM Consultancy. ${AC_RULES}
 
-Write a CLIENT REPORT (formal, concise, suitable for the client organisation).
+Write a CLIENT REPORT (formal, concise, suitable for the client organization).
 
 PARTICIPANT: ${participant.name} | Role: ${participant.role || "Not specified"} | Level: ${level?.name || "Not specified"} | Cohort: ${cohort?.name || "Not specified"} | Module: ${module?.name || module?.title || "Assessment Module"} | Date: ${completedAt ? new Date(completedAt).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB")} | Assessor: ${assessorName || "CCM Consultancy"} | Overall Score: ${overallScore ? overallScore.toFixed(1) : "N/A"}
 
@@ -211,7 +211,7 @@ export async function generateCohortReport({ cohortName, moduleName, cohortData,
     return { name: comp.name, avg: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null, count: vals.length };
   });
 
-  const context = `You are an expert Assessment Centre report writer for CCM Consultancy. ${AC_RULES}
+  const context = `You are an expert Assessment Center report writer for CCM Consultancy. ${AC_RULES}
 
 Cohort: ${cohortName} | Module: ${moduleName} | Assessor: ${assessorName || "CCM Consultancy"} | Participants: ${cohortData.length}
 
@@ -296,11 +296,11 @@ export async function downloadAssessorPDF({
   let y;
   const setDocY = (v) => { setY(v); y = v; };
 
-  redHeader("ASSESSMENT CENTRE - ASSESSOR REPORT (CONFIDENTIAL)");
+  redHeader("ASSESSMENT CENTER - ASSESSOR REPORT (CONFIDENTIAL)");
   setDocY(22);
 
   addText("Assessor Report", margin, 16, true); setDocY(getY() + 2);
-  addText(`CCM Consultancy Assessment Centre | ${new Date().toLocaleDateString()}`, margin, 9, false, [120, 120, 120]);
+  addText(`CCM Consultancy Assessment Center | ${new Date().toLocaleDateString()}`, margin, 9, false, [120, 120, 120]);
   setDocY(getY() + 6);
 
   const promLabel = (PROMOTION_OPTIONS.find(o => o.value === promotionRec) || {}).label || "Not yet selected";
@@ -432,7 +432,7 @@ export async function downloadParticipantPDF({
   addSection("Introduction");
   checkPage(20);
   doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
-  const intro = `${participant.name} participated in the CCM Consultancy Assessment Centre as part of a structured competency evaluation. The assessment covered the module ${mod.title}, which assessed the competencies of ${competencies.map(c => c.name).join(" and ")}. This report summarises ${participant.name}'s performance across the assessed competencies and provides a personalised development plan structured using the 70-20-10 learning framework.`;
+  const intro = `${participant.name} participated in the CCM Consultancy Assessment Center as part of a structured competency evaluation. The assessment covered the module ${mod.title}, which assessed the competencies of ${competencies.map(c => c.name).join(" and ")}. This report summarizes ${participant.name}'s performance across the assessed competencies and provides a personalized development plan structured using the 70-20-10 learning framework.`;
   const introLines = doc.splitTextToSize(intro, cW);
   doc.text(introLines, margin, getY()); setDocY(getY() + introLines.length * 5 + 8);
 
@@ -445,7 +445,7 @@ export async function downloadParticipantPDF({
     doc.setFontSize(10); doc.setFont("helvetica", "bold"); doc.setTextColor(120, 83, 0);
     doc.text("Assessment under review.", margin + 3, getY() + 2);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(120, 83, 0);
-    const wLines = doc.splitTextToSize("Your assessor is currently reviewing your responses. Your competency ratings and personalised development plan will be included in your final report once the review is complete.", cW - 6);
+    const wLines = doc.splitTextToSize("Your assessor is currently reviewing your responses. Your competency ratings and personalized development plan will be included in your final report once the review is complete.", cW - 6);
     doc.text(wLines, margin + 3, getY() + 8); setDocY(getY() + 24);
   } else {
     competencies.forEach(comp => {
@@ -476,7 +476,7 @@ export async function downloadParticipantPDF({
       doc.text(lines, margin, getY()); setDocY(getY() + lines.length * 5 + 6);
     }
 
-    addSection("Personalised Development Plan (70-20-10 Framework)");
+    addSection("Personalized Development Plan (70-20-10 Framework)");
     checkPage(20);
     doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(80, 80, 80);
     const fwText = "The 70-20-10 framework reflects research evidence that most effective professional learning happens through on-the-job experience (70%), learning from others such as mentors and coaches (20%), and formal structured learning (10%).";

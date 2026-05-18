@@ -92,7 +92,7 @@ function LandingScreen({ isMobile, onBegin }) {
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "3rem 1.5rem" }}>
         <CCMLogo scale={1.8} />
         <h1 style={{ fontFamily: SERIF, fontSize: 40, fontWeight: 700, margin: "2rem 0 0.5rem", color: "#111", textAlign: "center", lineHeight: 1.2 }}>
-          Assessment Centre
+          Assessment Center
         </h1>
         <p style={{ fontSize: 16, color: "#666", marginBottom: "3rem", textAlign: "center", maxWidth: 500, lineHeight: 1.7, marginTop: "0.75rem" }}>
           Welcome. Please ensure you are in a quiet, private environment with no interruptions before you begin.
@@ -103,7 +103,7 @@ function LandingScreen({ isMobile, onBegin }) {
       </div>
 
       <footer style={{ padding: "1.5rem", textAlign: "center", fontSize: 12, color: "#bbb" }}>
-        CCM Consultancy · Assessment Centre Platform
+        CCM Consultancy · Assessment Center Platform
       </footer>
     </div>
   );
@@ -287,7 +287,7 @@ function Part2TransitionScreen({ participant, tabSwitches, onBeginPart2, onSignO
           <div style={{ fontSize: 52, marginBottom: "1rem" }}>✅</div>
           <h2 style={{ fontFamily: SERIF, fontSize: 28, margin: "0 0 1rem", color: "#111" }}>Part 1 Complete</h2>
           <p style={{ fontSize: 15, color: "#555", lineHeight: 1.8, marginBottom: "2rem" }}>
-            You have completed the behavioural questions. Part 2 will now begin. In this section you will complete a series of tasks based on the case study. Your timer will start when you click Begin Part 2.
+            You have completed the behavioral questions. Part 2 will now begin. In this section you will complete a series of tasks based on the case study. Your timer will start when you click Begin Part 2.
           </p>
           <button onClick={onBeginPart2} style={btn(CCM_RED, "#fff", { fontSize: 16, padding: "14px 36px", borderRadius: 10 })}>
             Begin Part 2 →

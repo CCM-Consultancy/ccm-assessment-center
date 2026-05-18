@@ -45,7 +45,7 @@ exports.handler = async (event) => {
         .join("\n")
     : "  No specific questions provided — write guidance applicable to this competency in general.";
 
-  const prompt = `You are an assessment centre designer. Return ONLY valid JSON — no markdown, no explanation.
+  const prompt = `You are an assessment center designer. Return ONLY valid JSON — no markdown, no explanation.
 
 Case study: "${caseStudyName}"
 Competency: "${competencyName}"
@@ -55,22 +55,22 @@ Generate a JSON object with this exact structure (keep all text very short):
 {
   "definition": "One sentence defining ${competencyName} in the ${caseStudyName} context.",
   "score_descriptors": [
-    { "score": 0, "label": "Not Attempted",  "description": "Max 15 words describing score 0 behaviour." },
-    { "score": 1, "label": "Ineffective",    "description": "Max 15 words describing score 1 behaviour." },
-    { "score": 2, "label": "Inconsistent",   "description": "Max 15 words describing score 2 behaviour." },
-    { "score": 3, "label": "Effective",      "description": "Max 15 words describing score 3 behaviour." },
-    { "score": 4, "label": "Strong",         "description": "Max 15 words describing score 4 behaviour." },
-    { "score": 5, "label": "Exceptional",    "description": "Max 15 words describing score 5 behaviour." }
+    { "score": 0, "label": "Not Attempted",  "description": "Max 15 words describing score 0 behavior." },
+    { "score": 1, "label": "Ineffective",    "description": "Max 15 words describing score 1 behavior." },
+    { "score": 2, "label": "Inconsistent",   "description": "Max 15 words describing score 2 behavior." },
+    { "score": 3, "label": "Effective",      "description": "Max 15 words describing score 3 behavior." },
+    { "score": 4, "label": "Strong",         "description": "Max 15 words describing score 4 behavior." },
+    { "score": 5, "label": "Exceptional",    "description": "Max 15 words describing score 5 behavior." }
   ],
   "strong_indicators": [
-    "Positive observable behaviour, max 10 words.",
-    "Positive observable behaviour, max 10 words.",
-    "Positive observable behaviour, max 10 words."
+    "Positive observable behavior, max 10 words.",
+    "Positive observable behavior, max 10 words.",
+    "Positive observable behavior, max 10 words."
   ],
   "weak_indicators": [
-    "Negative observable behaviour, max 10 words.",
-    "Negative observable behaviour, max 10 words.",
-    "Negative observable behaviour, max 10 words."
+    "Negative observable behavior, max 10 words.",
+    "Negative observable behavior, max 10 words.",
+    "Negative observable behavior, max 10 words."
   ]
 }
 

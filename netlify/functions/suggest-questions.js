@@ -39,7 +39,7 @@ exports.handler = async (event) => {
     };
   }
 
-  const prompt = `You are an assessment centre designer. Generate exactly 5 behavioural interview questions for a management assessment centre.
+  const prompt = `You are an assessment center designer. Generate exactly 5 behavioral interview questions for a management assessment center.
 
 Case study context: "${caseStudyName}"
 Competency being assessed: "${competencyName}"

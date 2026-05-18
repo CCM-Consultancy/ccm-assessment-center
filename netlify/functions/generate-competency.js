@@ -28,14 +28,14 @@ exports.handler = async (event) => {
     return { statusCode: 500, headers, body: JSON.stringify({ error: "ANTHROPIC_API_KEY not set" }) };
   }
 
-  const prompt = `You are a senior assessment centre designer and occupational psychologist with 20+ years of experience.
+  const prompt = `You are a senior assessment center designer and occupational psychologist with 20+ years of experience.
 
-Define the following competency for use in a corporate assessment centre:
+Define the following competency for use in a corporate assessment center:
 Competency: "${competencyName}"
 
 Return ONLY a valid JSON object with no markdown, no explanation, no backticks:
 {
-  "definition": "A 2-3 sentence professional definition suitable for an assessment centre framework. Written in present tense, third person. Describes what high performance looks like behaviorally.",
+  "definition": "A 2-3 sentence professional definition suitable for an assessment center framework. Written in present tense, third person. Describes what high performance looks like behaviorally.",
   "observed_in": "A comma-separated list of assessment exercises where this competency is best observed (choose from: Structured interviews, Role-plays, Case studies, In-tray exercises, Presentations, Leaderless group discussions, Written exercises, High-pressure simulations)"
 }`;
 

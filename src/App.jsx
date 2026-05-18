@@ -1129,9 +1129,9 @@ ${compsHtml}
     const cs       = caseStudies.find(c => c.id === co.case_study_id);
     const appUrl   = window.location.origin;
     const dates    = co.start_date && co.end_date ? `${co.start_date} to ${co.end_date}` : co.start_date || co.end_date || "TBC";
-    const subject  = encodeURIComponent(`CCM Assessment Centre — ${co.name}`);
+    const subject  = encodeURIComponent(`CCM Assessment Center — ${co.name}`);
     const body     = encodeURIComponent(
-      `Dear Participant,\n\nYou are invited to complete the CCM Assessment Centre for ${cs?.name || "the assessment"}.\n\n` +
+      `Dear Participant,\n\nYou are invited to complete the CCM Assessment Center for ${cs?.name || "the assessment"}.\n\n` +
       `Cohort: ${co.name}\nDates: ${dates}\n\n` +
       `To register:\n1. Visit: ${appUrl}\n2. Click "Register"\n3. Enter your access code: ${co.access_code}\n\n` +
       `Please keep this code confidential.\n\nKind regards`
@@ -1277,7 +1277,7 @@ ${compsHtml}
       {/* ── Top header ────────────────────────────────────────────────────────── */}
       <div style={S.header}>
         <CCMLogo />
-        <span style={{ fontWeight:700, fontSize:15, color:"#111" }}>Assessment Centre Admin</span>
+        <span style={{ fontWeight:700, fontSize:15, color:"#111" }}>Assessment Center Admin</span>
         <button onClick={() => setScreen("login")} style={S.btn("#fff","#666",{ fontSize:12 })}>Sign out</button>
       </div>
 
@@ -1591,11 +1591,11 @@ ${compsHtml}
                     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px 24px" }}>
                       {[
                         { key:"reading_time_mins", label:"Reading time (all levels)" },
-                        { key:"sup_q_mins",        label:"Supervisor — Behavioural Qs" },
+                        { key:"sup_q_mins",        label:"Supervisor — Behavioral Qs" },
                         { key:"sup_task_mins",     label:"Supervisor — Tasks" },
-                        { key:"mgr_q_mins",        label:"Manager — Behavioural Qs" },
+                        { key:"mgr_q_mins",        label:"Manager — Behavioral Qs" },
                         { key:"mgr_task_mins",     label:"Manager — Tasks" },
-                        { key:"dir_q_mins",        label:"Director — Behavioural Qs" },
+                        { key:"dir_q_mins",        label:"Director — Behavioral Qs" },
                         { key:"dir_task_mins",     label:"Director — Tasks" },
                       ].map(({ key, label }) => (
                         <div key={key}>
@@ -2672,7 +2672,7 @@ ${compsHtml}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1.25rem" }}>
               <div>
                 <h2 style={{ margin:0, fontSize:18, fontWeight:700 }}>Assessor Guide</h2>
-                <p style={{ margin:"4px 0 0", fontSize:13, color:"#888" }}>Read-only guide for assessors during the assessment centre</p>
+                <p style={{ margin:"4px 0 0", fontSize:13, color:"#888" }}>Read-only guide for assessors during the assessment center</p>
               </div>
               {agData && (
                 <button onClick={() => openPdfWindow(agData)} style={S.btn("#111","#fff",{ fontSize:13 })}>Download PDF</button>
@@ -3190,7 +3190,7 @@ ${compsHtml}
                   {rptH("1. Executive Summary")}{rptPara(content.executiveSummary)}
                   {rptH("2. Assessor Declaration")}{rptPara(content.assessorDeclaration)}
                   {rptH("3. Assessment Methodology")}
-                  {rptPara("This assessment was conducted using CCM Consultancy's Assessment Centre methodology, combining structured behavioural interviews and case study analysis. Competencies were assessed against standardised criteria across two parts: Part 1 (behavioural questions) and Part 2 (case study tasks).")}
+                  {rptPara("This assessment was conducted using CCM Consultancy's Assessment Center methodology, combining structured behavioral interviews and case study analysis. Competencies were assessed against standardized criteria across two parts: Part 1 (behavioral questions) and Part 2 (case study tasks).")}
                   {rptH("4. Competencies Measured and Scores")}
                   <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, marginBottom:"1rem" }}>
                     <thead>
@@ -3273,7 +3273,7 @@ ${compsHtml}
                   {rptH("1. Executive Summary")}{rptPara(content.executiveSummary)}
                   {rptH("2. Assessor Declaration")}{rptPara(content.assessorDeclaration)}
                   {rptH("3. Assessment Methodology")}
-                  {rptPara("This cohort assessment was conducted using CCM Consultancy's Assessment Centre methodology. All participants completed standardised behavioural interview questions (Part 1) and case study tasks (Part 2), assessed against consistent competency criteria.")}
+                  {rptPara("This cohort assessment was conducted using CCM Consultancy's Assessment Center methodology. All participants completed standardized behavioral interview questions (Part 1) and case study tasks (Part 2), assessed against consistent competency criteria.")}
                   {rptH("4. Competencies Measured and Cohort Scores")}
                   {(content.competencyInsights||[]).map((ci,i) => {
                     const vals = cd.map(p=>(p.compScores.find(c=>c.name===ci.name)||{}).overall).filter(v=>v!==null&&v!==undefined);
@@ -3731,10 +3731,10 @@ ${compsHtml}
                         </div>
                       </div>
 
-                      {/* Part 1 — behavioural questions */}
+                      {/* Part 1 — behavioral questions */}
                       <div style={{ ...S.card, marginBottom:"1.5rem" }}>
                         <div style={{ fontSize:11, fontWeight:700, color:CCM_RED, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"1.25rem" }}>
-                          Part 1 — Behavioural Questions
+                          Part 1 — Behavioral Questions
                         </div>
                         {compList.length === 0 && (
                           <p style={{ fontSize:13, color:"#888", margin:0 }}>No questions found for this module.</p>
