@@ -94,6 +94,116 @@ Rate each competency 1-5 (0 if blank/not attempted). Return valid JSON only — 
   return parsed;
 }
 
+// ─── Report Generation ────────────────────────────────────────────────────────
+
+const SCORE_LABELS_AI = {1:"Ineffective",2:"Inconsistent",3:"Effective",4:"Strong",5:"Exceptional"};
+
+function scoreLabel(v) {
+  if (v === null) return "Not Scored";
+  return SCORE_LABELS_AI[Math.min(5, Math.max(1, Math.round(v)))] || "Not Scored";
+}
+
+function buildCompScores(compList, questions, scores, answers, part2Answers, level) {
+  const useAdv = level?.complexity_tier === "advanced";
+  return compList.map(comp => {
+    const qs = questions.filter(q => q.competency_id === comp.id);
+    const p1Scores = qs.map(q => scores.part1?.[q.id]).filter(s => s && !s.not_attempted && s.score);
+    const p1Avg = p1Scores.length ? p1Scores.reduce((a, s) => a + s.score, 0) / p1Scores.length : null;
+    const p2s = scores.part2?.[comp.id];
+    const p2Score = p2s && !p2s.not_attempted && p2s.score ? p2s.score : null;
+    const overall = p1Avg !== null && p2Score !== null ? (p1Avg + p2Score) / 2 : (p1Avg ?? p2Score ?? null);
+    const qText = qs.map(q => {
+      const t = useAdv ? (q.text_advanced || q.text_standard) : (q.text_standard || q.text_advanced);
+      const a = ((answers?.questions || {})[q.id] || answers?.[q.id] || "Not attempted").substring(0, 300);
+      return `Q: ${t}\nA: ${a}`;
+    }).join("\n\n");
+    const p1Notes = qs.map(q => scores.part1?.[q.id]?.notes).filter(Boolean).join(" ");
+    return {
+      id: comp.id, name: comp.name, p1Avg, p2Score, overall,
+      label: scoreLabel(overall),
+      qText,
+      p2Text: (part2Answers?.written_response || "").substring(0, 400),
+      notes: [p1Notes, p2s?.notes].filter(Boolean).join(" | "),
+    };
+  });
+}
+
+const AC_RULES = `AC Language Rules:
+- Never say "passed" or "failed"
+- Always say "The candidate demonstrated..."
+- Recommendation categories ONLY: "Recommended" | "Recommended with Development" | "Deferred" | "Not Recommended"
+- Scores: 1=Ineffective, 2=Inconsistent, 3=Effective, 4=Strong, 5=Exceptional
+- No em dashes. Formal, third-person tone.`;
+
+export async function generateIndividualReport({ participant, level, cohort, module, questions, compList, scores, answers, part2Answers, completedAt }) {
+  const compScores = buildCompScores(compList, questions, scores, answers, part2Answers, level);
+  const overallVals = compScores.map(c => c.overall).filter(v => v !== null);
+  const overallScore = overallVals.length ? overallVals.reduce((a, b) => a + b, 0) / overallVals.length : null;
+
+  const prompt = `You are an expert Assessment Centre report writer for CCM Consultancy. ${AC_RULES}
+
+PARTICIPANT: ${participant.name} | Role: ${participant.role || "Not specified"} | Level: ${level?.name || "Not specified"} | Cohort: ${cohort?.name || "Not specified"} | Module: ${module?.name || module?.title || "Assessment Module"} | Date: ${completedAt ? new Date(completedAt).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB")} | Overall Score: ${overallScore ? overallScore.toFixed(1) : "N/A"}
+
+COMPETENCY DATA:
+${compScores.map(c => `[${c.name}] Score: ${c.overall ? c.overall.toFixed(1) : "N/A"} (${c.label})\n${c.qText}${c.p2Text ? `\nPart 2: ${c.p2Text}` : ""}${c.notes ? `\nNotes: ${c.notes}` : ""}`).join("\n\n")}
+
+Return ONLY valid JSON:
+{"executiveSummary":"3-4 sentences","assessmentMethodology":"2 sentences on AC methodology","howToUse":"2 sentences on how to use this report","competencies":[{"name":"exact name","evidence":"2-3 sentences of specific evidence","strength":"1-2 sentences on strength","developmentOpportunity":"1-2 sentences on dev area","on70":["2 specific on-the-job actions"],"social20":["2 social/mentoring actions"],"formal10":["1-2 formal learning actions"]}],"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","recommendation":"one category only","recommendationNarrative":"2-3 sentences using AC language"}`;
+
+  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 3000 });
+  if (!text) throw new Error("No AI response");
+  return JSON.parse(text.replace(/```json|```/g, "").trim());
+}
+
+export async function generateClientReport({ participant, level, cohort, module, questions, compList, scores, answers, part2Answers, completedAt, assessorName }) {
+  const compScores = buildCompScores(compList, questions, scores, answers, part2Answers, level);
+  const overallVals = compScores.map(c => c.overall).filter(v => v !== null);
+  const overallScore = overallVals.length ? overallVals.reduce((a, b) => a + b, 0) / overallVals.length : null;
+
+  const prompt = `You are an expert Assessment Centre report writer for CCM Consultancy. ${AC_RULES}
+
+Write a CLIENT REPORT (formal, concise, suitable for the client organisation).
+
+PARTICIPANT: ${participant.name} | Role: ${participant.role || "Not specified"} | Level: ${level?.name || "Not specified"} | Cohort: ${cohort?.name || "Not specified"} | Module: ${module?.name || module?.title || "Assessment Module"} | Date: ${completedAt ? new Date(completedAt).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB")} | Assessor: ${assessorName || "CCM Consultancy"} | Overall Score: ${overallScore ? overallScore.toFixed(1) : "N/A"}
+
+COMPETENCY SCORES:
+${compScores.map(c => `[${c.name}] ${c.overall ? c.overall.toFixed(1) : "N/A"} (${c.label}) | Notes: ${c.notes || "None"}`).join("\n")}
+
+Return ONLY valid JSON:
+{"executiveSummary":"3-4 sentences","assessorDeclaration":"I confirm this assessment was conducted in line with CCM Consultancy assessment centre standards. [Assessor: ${assessorName || "CCM Consultancy"}]","competencies":[{"name":"exact name","evidence":"one concise sentence of evidence","developmentPriority":"one line development priority"}],"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","devSummary":[{"competency":"name","action":"one line recommended action"}],"recommendation":"one category only","recommendationNarrative":"2-3 formal sentences"}`;
+
+  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 3000 });
+  if (!text) throw new Error("No AI response");
+  return JSON.parse(text.replace(/```json|```/g, "").trim());
+}
+
+export async function generateCohortReport({ cohortName, moduleName, cohortData, compList, assessorName }) {
+  // cohortData: [{ name, role, level, overall, compScores: [{name, overall}] }]
+  const avgByComp = compList.map(comp => {
+    const vals = cohortData.map(p => (p.compScores.find(c => c.name === comp.name) || {}).overall).filter(v => v !== null && v !== undefined);
+    return { name: comp.name, avg: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null, count: vals.length };
+  });
+
+  const prompt = `You are an expert Assessment Centre report writer for CCM Consultancy. ${AC_RULES}
+
+Write a COHORT REPORT for a group of participants.
+
+Cohort: ${cohortName} | Module: ${moduleName} | Assessor: ${assessorName || "CCM Consultancy"} | Participants: ${cohortData.length}
+
+COHORT COMPETENCY AVERAGES:
+${avgByComp.map(c => `${c.name}: ${c.avg ? c.avg.toFixed(1) : "N/A"} (${scoreLabel(c.avg)}) across ${c.count} participants`).join("\n")}
+
+INDIVIDUAL SCORES:
+${cohortData.map(p => `${p.name} (${p.level || "Unknown level"}): Overall ${p.overall ? p.overall.toFixed(1) : "N/A"} | ${p.compScores.map(c => `${c.name}: ${c.overall ? c.overall.toFixed(1) : "N/A"}`).join(", ")}`).join("\n")}
+
+Return ONLY valid JSON:
+{"executiveSummary":"3-4 sentences on overall cohort performance","assessorDeclaration":"I confirm all assessments were conducted in line with CCM Consultancy standards. [Assessor: ${assessorName || "CCM Consultancy"}]","competencyInsights":[{"name":"exact name","cohortObs":"2-3 sentences on cohort pattern for this competency"}],"overallStrengths":"2-3 sentences on cohort-wide strengths","developmentThemes":"2-3 sentences on cohort-wide development themes","devPriorities":[{"competency":"name","on70":"one specific on-the-job priority","social20":"one social/mentoring priority","formal10":"one formal learning priority"},{"competency":"name","on70":"...","social20":"...","formal10":"..."}],"participantSummaries":[{"name":"participant name","recommendation":"one category","summary":"one paragraph using AC language"}]}`;
+
+  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 3000 });
+  if (!text) throw new Error("No AI response");
+  return JSON.parse(text.replace(/```json|```/g, "").trim());
+}
+
 // ─── PDF helpers ───────────────────────────────────────────────────────────────
 
 function loadJsPDF() {

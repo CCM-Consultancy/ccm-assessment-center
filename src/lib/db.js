@@ -541,10 +541,18 @@ export async function getModules() {
 }
 
 export async function getQuestionsForModule(moduleId) {
-  const [questions, comps] = await Promise.all([
-    arr(await q("cs_questions",   "GET", null, `?module_id=eq.${moduleId}&select=*&order=display_order.asc`)),
-    arr(await q("cs_competencies","GET", null, "?select=*")),
+  const questions = arr(await q("cs_questions", "GET", null,
+    `?module_id=eq.${moduleId}&select=*&order=display_order.asc`));
+  const usedIds = [...new Set(questions.map(x => x.competency_id).filter(Boolean))];
+  if (!usedIds.length) return { questions, competencies: [] };
+  const filter = `?id=in.(${usedIds.join(",")})&select=*`;
+  const [ccmComps, csComps] = await Promise.all([
+    arr(await q("ccm_competencies", "GET", null, filter)),
+    arr(await q("cs_competencies",  "GET", null, filter)),
   ]);
+  // merge; ccm takes precedence if same id appears in both
+  const seen = new Set(ccmComps.map(c => c.id));
+  const comps = [...ccmComps, ...csComps.filter(c => !seen.has(c.id))];
   const compMap = Object.fromEntries(comps.map(c => [c.id, c]));
   return {
     questions:    questions.map(qs => ({ ...qs, competency: compMap[qs.competency_id] || null })),

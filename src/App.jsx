@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { CCM_RED, S } from "./lib/constants";
 import * as db from "./lib/db";
+import * as ai from "./lib/ai";
 
 // ─── Logo ──────────────────────────────────────────────────────────────────────
 function CCMLogo() {
@@ -135,6 +136,9 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const [rpCompetencies,  setRpCompetencies]  = useState([]);
   const [rpScores,        setRpScores]        = useState({ part1:{}, part2:{} });
   const [rpSaving,        setRpSaving]        = useState(false);
+  const [rpReport,        setRpReport]        = useState(null);
+  const [rpReportLoading, setRpReportLoading] = useState(false);
+  const [rpReportType,    setRpReportType]    = useState(null);
 
   // ─── Self-registration ────────────────────────────────────────────────────────
   const [loginMode,  setLoginMode]  = useState("signin"); // "signin" | "register"
@@ -2950,8 +2954,417 @@ ${compsHtml}
             );
           }
 
+          // ── Report helpers ─────────────────────────────────────────────────────
+          function doPrint() {
+            const src = document.getElementById("rp-print-src");
+            if (!src) return;
+            const prev = document.getElementById("rp-print-inject");
+            if (prev) document.body.removeChild(prev);
+            const inj = document.createElement("div");
+            inj.id = "rp-print-inject";
+            inj.innerHTML = src.innerHTML;
+            document.body.appendChild(inj);
+            document.body.classList.add("rp-printing");
+            window.print();
+            document.body.removeChild(inj);
+            document.body.classList.remove("rp-printing");
+          }
+
+          async function doGenerateReport(type) {
+            if (!selResult) return;
+            setRpReportLoading(true);
+            setRpReportType(type);
+            setRpReport(null);
+            try {
+              const base = {
+                participant: selResult.participant,
+                level:       selResult.level,
+                cohort:      selResult.cohort,
+                module:      selResult.module,
+                questions:   rpQuestions,
+                compList,
+                scores:      rpScores,
+                answers:     selResult.answers,
+                part2Answers: selResult.part2_answers,
+                completedAt: selResult.completed_at,
+                assessorName: "CCM Consultancy",
+              };
+              let content;
+              if (type === "individual") {
+                content = await ai.generateIndividualReport(base);
+              } else if (type === "client") {
+                content = await ai.generateClientReport(base);
+              } else if (type === "cohort") {
+                const SCORE_LBL = {1:"Ineffective",2:"Inconsistent",3:"Effective",4:"Strong",5:"Exceptional"};
+                const scoreLbl = v => v===null ? "–" : (SCORE_LBL[Math.min(5,Math.max(1,Math.round(v)))]||"–");
+                const cohortRows = resultRows.filter(r =>
+                  r.module_id === selResult.module_id &&
+                  r.participant?.cohort_id === selResult.participant?.cohort_id
+                );
+                const cohortData = cohortRows.map(r => {
+                  const sc = r.participant_id === selResult.participant_id ? rpScores : (r.scores || {part1:{},part2:{}});
+                  const cs = compList.map(comp => {
+                    const qs2 = rpQuestions.filter(q => q.competency_id === comp.id);
+                    const p1s = qs2.map(q => sc.part1?.[q.id]).filter(s => s && !s.not_attempted && s.score);
+                    const p1a = p1s.length ? p1s.reduce((a,s)=>a+s.score,0)/p1s.length : null;
+                    const p2e = sc.part2?.[comp.id];
+                    const p2v = p2e && !p2e.not_attempted && p2e.score ? p2e.score : null;
+                    const ov  = p1a!==null && p2v!==null ? (p1a+p2v)/2 : (p1a??p2v??null);
+                    return { name: comp.name, overall: ov };
+                  });
+                  const vals = cs.map(c=>c.overall).filter(v=>v!==null);
+                  return {
+                    name:  r.participant?.name || "Unknown",
+                    role:  r.participant?.role || "",
+                    level: r.level?.name || "",
+                    overall: vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null,
+                    compScores: cs,
+                  };
+                });
+                content = await ai.generateCohortReport({
+                  cohortName:  selResult.cohort?.name || "Cohort",
+                  moduleName:  selResult.module?.name || selResult.module?.title || "Module",
+                  cohortData,
+                  compList,
+                  assessorName: "CCM Consultancy",
+                });
+                content._cohortData   = cohortData;
+                content._compList     = compList.map(c=>c.name);
+                content._scoreLbl     = scoreLbl;
+              }
+              setRpReport({ type, content, selResult: { ...selResult }, compList, rpScores, rpQuestions, completedAt: selResult.completed_at });
+            } catch(e) { notify("Report generation failed: " + e.message); }
+            setRpReportLoading(false);
+            setRpReportType(null);
+          }
+
+          // ── Report rendering helpers ───────────────────────────────────────────
+          const RPT_RED   = "#e8251a";
+          const RPT_GRAY  = "#555";
+          const SCORE_COLORS_RP = {1:"#dc2626",2:"#ea580c",3:"#ca8a04",4:"#16a34a",5:"#0369a1"};
+          const SCORE_LBL_RP = {1:"Ineffective",2:"Inconsistent",3:"Effective",4:"Strong",5:"Exceptional"};
+          const fmtRp = v => v===null||v===undefined ? "–" : Number(v).toFixed(1);
+          const scoreColor = v => v===null ? "#bbb" : (SCORE_COLORS_RP[Math.min(5,Math.max(1,Math.round(v)))]||"#555");
+          const scoreLblRp = v => v===null ? "Not Scored" : (SCORE_LBL_RP[Math.min(5,Math.max(1,Math.round(v)))]||"Not Scored");
+          const rpDate = d => d ? new Date(d).toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"}) : new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
+
+          const rptH = (title) => (
+            <div style={{ marginTop:"2rem", marginBottom:"0.5rem", borderBottom:`2px solid ${RPT_RED}`, paddingBottom:6 }}>
+              <span style={{ fontSize:13, fontWeight:700, color:RPT_RED, textTransform:"uppercase", letterSpacing:"0.07em" }}>{title}</span>
+            </div>
+          );
+          const rptPara = (text, style={}) => (
+            <p style={{ fontSize:13, color:"#222", lineHeight:1.8, margin:"0 0 0.75rem", ...style }}>{text}</p>
+          );
+          const rptCoverHeader = (title, participant, level, cohort, module, completedAt, extra) => (
+            <div>
+              <div style={{ background:RPT_RED, padding:"18px 28px", display:"flex", alignItems:"center", gap:16 }}>
+                <div>
+                  <div style={{ color:"#fff", fontWeight:900, fontSize:22, letterSpacing:-0.5 }}>CCM</div>
+                  <div style={{ color:"#fff", fontSize:9, letterSpacing:2.2, opacity:0.9 }}>CONSULTANCY</div>
+                </div>
+                <div style={{ flex:1 }} />
+                <div style={{ color:"rgba(255,255,255,0.8)", fontSize:11 }}>CONFIDENTIAL</div>
+              </div>
+              <div style={{ padding:"28px 28px 20px", borderBottom:"1px solid #eee" }}>
+                <div style={{ fontSize:22, fontWeight:700, color:"#111", marginBottom:6 }}>{title}</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"6px 24px", fontSize:13 }}>
+                  <div><span style={{ color:"#888" }}>Participant: </span><strong>{participant?.name}</strong></div>
+                  <div><span style={{ color:"#888" }}>Level: </span><strong>{level?.name || "–"}</strong></div>
+                  <div><span style={{ color:"#888" }}>Role: </span><strong>{participant?.role || "Not specified"}</strong></div>
+                  <div><span style={{ color:"#888" }}>Cohort: </span><strong>{cohort?.name || "–"}</strong></div>
+                  <div><span style={{ color:"#888" }}>Module: </span><strong>{module?.name || module?.title || "–"}</strong></div>
+                  <div><span style={{ color:"#888" }}>Date: </span><strong>{rpDate(completedAt)}</strong></div>
+                  {extra}
+                </div>
+              </div>
+            </div>
+          );
+
+          function renderIndividualReport(content, sr) {
+            const cl = rpReport?.compList || compList;
+            const sc = rpReport?.rpScores || rpScores;
+            const qs = rpReport?.rpQuestions || rpQuestions;
+            const compScoreMap = {};
+            cl.forEach(comp => {
+              const p1s = qs.filter(q=>q.competency_id===comp.id).map(q=>sc.part1?.[q.id]).filter(s=>s&&!s.not_attempted&&s.score);
+              const p1a = p1s.length ? p1s.reduce((a,s)=>a+s.score,0)/p1s.length : null;
+              const p2e = sc.part2?.[comp.id];
+              const p2v = p2e&&!p2e.not_attempted&&p2e.score ? p2e.score : null;
+              compScoreMap[comp.name] = p1a!==null&&p2v!==null ? (p1a+p2v)/2 : (p1a??p2v??null);
+            });
+            return (
+              <div style={{ padding:"0 0 40px" }}>
+                {rptCoverHeader("Individual Assessment Report", sr.participant, sr.level, sr.cohort, sr.module, sr.completed_at)}
+                <div style={{ padding:"0 28px" }}>
+                  {rptH("1. Executive Summary")}{rptPara(content.executiveSummary)}
+                  {rptH("2. Assessment Methodology")}{rptPara(content.assessmentMethodology)}
+                  {rptH("3. How to Use This Report")}{rptPara(content.howToUse)}
+                  {rptH("4. Competencies Measured and Scores")}
+                  {(content.competencies||[]).map((comp,i) => {
+                    const sc2 = compScoreMap[comp.name];
+                    return (
+                      <div key={i} className="rp-avoid-break" style={{ marginBottom:"1.25rem", padding:"16px", background:"#fafafa", borderRadius:8, border:"1px solid #eee" }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                          <span style={{ fontWeight:700, fontSize:14 }}>{comp.name}</span>
+                          <span style={{ fontWeight:700, fontSize:14, color: scoreColor(sc2) }}>{fmtRp(sc2)} / 5 &nbsp;<span style={{ fontSize:11, fontWeight:400 }}>{scoreLblRp(sc2)}</span></span>
+                        </div>
+                        <p style={{ fontSize:12, color:"#333", marginBottom:6, lineHeight:1.7 }}><strong>Evidence: </strong>{comp.evidence}</p>
+                        <p style={{ fontSize:12, color:"#333", marginBottom:4, lineHeight:1.7 }}><strong style={{ color:"#16a34a" }}>Strength: </strong>{comp.strength}</p>
+                        <p style={{ fontSize:12, color:"#333", lineHeight:1.7 }}><strong style={{ color:"#9a3412" }}>Development opportunity: </strong>{comp.developmentOpportunity}</p>
+                      </div>
+                    );
+                  })}
+                  {rptH("5. Overall Strengths and Areas for Development")}
+                  {rptPara(content.overallStrengths)}
+                  {rptPara(content.areasForDevelopment)}
+                  <div className="rp-page-break" />
+                  {rptH("6. Individual Development Plan — 70-20-10 Framework")}
+                  {(content.competencies||[]).map((comp,i) => (
+                    <div key={i} className="rp-avoid-break" style={{ marginBottom:"1.25rem" }}>
+                      <div style={{ fontWeight:700, fontSize:13, color:RPT_RED, marginBottom:8 }}>{comp.name}</div>
+                      {[["70% — On the Job", comp.on70],["20% — Learning from Others", comp.social20],["10% — Formal Learning", comp.formal10]].map(([label, items]) => (
+                        <div key={label} style={{ marginBottom:8 }}>
+                          <div style={{ fontSize:12, fontWeight:700, color:RPT_GRAY, marginBottom:4 }}>{label}</div>
+                          <ul style={{ margin:0, paddingLeft:18 }}>
+                            {(items||[]).map((item,j) => <li key={j} style={{ fontSize:12, color:"#444", lineHeight:1.7, marginBottom:2 }}>{item}</li>)}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  {rptH("7. Result of Assessment")}
+                  <div className="rp-avoid-break" style={{ background:"#f8f9fb", border:`2px solid ${RPT_RED}`, borderRadius:8, padding:"16px 20px", marginBottom:"1rem" }}>
+                    <div style={{ fontSize:16, fontWeight:700, color:RPT_RED, marginBottom:8 }}>{content.recommendation}</div>
+                    {rptPara(content.recommendationNarrative, { margin:0 })}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          function renderClientReport(content, sr) {
+            const cl = rpReport?.compList || compList;
+            const sc = rpReport?.rpScores || rpScores;
+            const qs = rpReport?.rpQuestions || rpQuestions;
+            const compScoreMap = {};
+            cl.forEach(comp => {
+              const p1s = qs.filter(q=>q.competency_id===comp.id).map(q=>sc.part1?.[q.id]).filter(s=>s&&!s.not_attempted&&s.score);
+              const p1a = p1s.length ? p1s.reduce((a,s)=>a+s.score,0)/p1s.length : null;
+              const p2e = sc.part2?.[comp.id];
+              const p2v = p2e&&!p2e.not_attempted&&p2e.score ? p2e.score : null;
+              compScoreMap[comp.name] = p1a!==null&&p2v!==null ? (p1a+p2v)/2 : (p1a??p2v??null);
+            });
+            return (
+              <div style={{ padding:"0 0 40px" }}>
+                {rptCoverHeader("Client Assessment Report", sr.participant, sr.level, sr.cohort, sr.module, sr.completed_at)}
+                <div style={{ padding:"0 28px" }}>
+                  {rptH("1. Executive Summary")}{rptPara(content.executiveSummary)}
+                  {rptH("2. Assessor Declaration")}{rptPara(content.assessorDeclaration)}
+                  {rptH("3. Assessment Methodology")}
+                  {rptPara("This assessment was conducted using CCM Consultancy's Assessment Centre methodology, combining structured behavioural interviews and case study analysis. Competencies were assessed against standardised criteria across two parts: Part 1 (behavioural questions) and Part 2 (case study tasks).")}
+                  {rptH("4. Competencies Measured and Scores")}
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, marginBottom:"1rem" }}>
+                    <thead>
+                      <tr style={{ background:"#f5f5f5" }}>
+                        {["Competency","Score","Evidence","Development Priority"].map(h=>(
+                          <th key={h} style={{ padding:"8px 10px", textAlign:"left", fontWeight:700, color:"#555", borderBottom:"2px solid #ddd" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(content.competencies||[]).map((comp,i)=>{
+                        const sc2 = compScoreMap[comp.name];
+                        return (
+                          <tr key={i} style={{ background:i%2===0?"#fafafa":"#fff" }}>
+                            <td style={{ padding:"8px 10px", fontWeight:600, borderBottom:"1px solid #f0f0f0" }}>{comp.name}</td>
+                            <td style={{ padding:"8px 10px", fontWeight:700, color:scoreColor(sc2), borderBottom:"1px solid #f0f0f0", whiteSpace:"nowrap" }}>{fmtRp(sc2)} — {scoreLblRp(sc2)}</td>
+                            <td style={{ padding:"8px 10px", color:"#333", borderBottom:"1px solid #f0f0f0" }}>{comp.evidence}</td>
+                            <td style={{ padding:"8px 10px", color:"#555", borderBottom:"1px solid #f0f0f0" }}>{comp.developmentPriority}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {rptH("5. Overall Strengths and Areas for Development")}
+                  {rptPara(content.overallStrengths)}{rptPara(content.areasForDevelopment)}
+                  {rptH("6. Summary of Individual Development Plan")}
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12, marginBottom:"1rem" }}>
+                    <thead>
+                      <tr style={{ background:"#f5f5f5" }}>
+                        {["Competency","Recommended Action"].map(h=>(
+                          <th key={h} style={{ padding:"8px 10px", textAlign:"left", fontWeight:700, color:"#555", borderBottom:"2px solid #ddd" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(content.devSummary||[]).map((row,i)=>(
+                        <tr key={i} style={{ background:i%2===0?"#fafafa":"#fff" }}>
+                          <td style={{ padding:"8px 10px", fontWeight:600, borderBottom:"1px solid #f0f0f0" }}>{row.competency}</td>
+                          <td style={{ padding:"8px 10px", color:"#333", borderBottom:"1px solid #f0f0f0" }}>{row.action}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {rptH("7. Summary and Recommendation")}
+                  <div className="rp-avoid-break" style={{ background:"#f8f9fb", border:`2px solid ${RPT_RED}`, borderRadius:8, padding:"16px 20px" }}>
+                    <div style={{ fontSize:16, fontWeight:700, color:RPT_RED, marginBottom:8 }}>{content.recommendation}</div>
+                    {rptPara(content.recommendationNarrative, { margin:0 })}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          function renderCohortReport(content, sr) {
+            const cd    = content._cohortData || [];
+            const names = content._compList   || [];
+            const sLbl  = content._scoreLbl   || (v => v===null ? "–" : Number(v).toFixed(1));
+            return (
+              <div style={{ padding:"0 0 40px" }}>
+                <div>
+                  <div style={{ background:RPT_RED, padding:"18px 28px", display:"flex", alignItems:"center", gap:16 }}>
+                    <div>
+                      <div style={{ color:"#fff", fontWeight:900, fontSize:22, letterSpacing:-0.5 }}>CCM</div>
+                      <div style={{ color:"#fff", fontSize:9, letterSpacing:2.2, opacity:0.9 }}>CONSULTANCY</div>
+                    </div>
+                    <div style={{ flex:1 }} />
+                    <div style={{ color:"rgba(255,255,255,0.8)", fontSize:11 }}>CONFIDENTIAL</div>
+                  </div>
+                  <div style={{ padding:"28px 28px 20px", borderBottom:"1px solid #eee" }}>
+                    <div style={{ fontSize:22, fontWeight:700, color:"#111", marginBottom:6 }}>Cohort Assessment Report</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"6px 24px", fontSize:13 }}>
+                      <div><span style={{ color:"#888" }}>Cohort: </span><strong>{sr.cohort?.name || "–"}</strong></div>
+                      <div><span style={{ color:"#888" }}>Module: </span><strong>{sr.module?.name || sr.module?.title || "–"}</strong></div>
+                      <div><span style={{ color:"#888" }}>Participants: </span><strong>{cd.length}</strong></div>
+                      <div><span style={{ color:"#888" }}>Date: </span><strong>{rpDate(sr.completed_at)}</strong></div>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ padding:"0 28px" }}>
+                  {rptH("1. Executive Summary")}{rptPara(content.executiveSummary)}
+                  {rptH("2. Assessor Declaration")}{rptPara(content.assessorDeclaration)}
+                  {rptH("3. Assessment Methodology")}
+                  {rptPara("This cohort assessment was conducted using CCM Consultancy's Assessment Centre methodology. All participants completed standardised behavioural interview questions (Part 1) and case study tasks (Part 2), assessed against consistent competency criteria.")}
+                  {rptH("4. Competencies Measured and Cohort Scores")}
+                  {(content.competencyInsights||[]).map((ci,i) => {
+                    const vals = cd.map(p=>(p.compScores.find(c=>c.name===ci.name)||{}).overall).filter(v=>v!==null&&v!==undefined);
+                    const avg  = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+                    return (
+                      <div key={i} className="rp-avoid-break" style={{ marginBottom:"1rem", padding:"14px 16px", background:"#fafafa", borderRadius:8, border:"1px solid #eee" }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                          <span style={{ fontWeight:700, fontSize:13 }}>{ci.name}</span>
+                          <span style={{ fontWeight:700, color:scoreColor(avg) }}>{fmtRp(avg)} / 5 — {scoreLblRp(avg)}</span>
+                        </div>
+                        {rptPara(ci.cohortObs, { margin:0, fontSize:12 })}
+                      </div>
+                    );
+                  })}
+                  {rptH("5. Competency Heatmap")}
+                  <div style={{ overflowX:"auto", marginBottom:"1rem" }}>
+                    <table style={{ borderCollapse:"collapse", fontSize:11, minWidth:400 }}>
+                      <thead>
+                        <tr>
+                          <th style={{ padding:"6px 10px", textAlign:"left", fontWeight:700, borderBottom:"2px solid #ddd", whiteSpace:"nowrap" }}>Participant</th>
+                          <th style={{ padding:"6px 8px", textAlign:"left", fontWeight:700, borderBottom:"2px solid #ddd", whiteSpace:"nowrap" }}>Level</th>
+                          {names.map(n=><th key={n} style={{ padding:"6px 8px", textAlign:"center", fontWeight:600, borderBottom:"2px solid #ddd", fontSize:10, whiteSpace:"nowrap" }}>{n}</th>)}
+                          <th style={{ padding:"6px 8px", textAlign:"center", fontWeight:700, borderBottom:"2px solid #ddd" }}>Overall</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cd.map((p,i)=>(
+                          <tr key={i} style={{ background:i%2===0?"#fafafa":"#fff" }}>
+                            <td style={{ padding:"6px 10px", fontWeight:600, borderBottom:"1px solid #f0f0f0", whiteSpace:"nowrap" }}>{p.name}</td>
+                            <td style={{ padding:"6px 8px", color:"#666", borderBottom:"1px solid #f0f0f0", whiteSpace:"nowrap" }}>{p.level}</td>
+                            {names.map(n=>{
+                              const v=(p.compScores.find(c=>c.name===n)||{}).overall;
+                              return <td key={n} style={{ padding:"6px 8px", textAlign:"center", fontWeight:700, color:scoreColor(v), borderBottom:"1px solid #f0f0f0" }}>{fmtRp(v)}</td>;
+                            })}
+                            <td style={{ padding:"6px 8px", textAlign:"center", fontWeight:700, color:scoreColor(p.overall), borderBottom:"1px solid #f0f0f0" }}>{fmtRp(p.overall)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {rptH("6. Overall Strengths and Development Themes")}
+                  {rptPara(content.overallStrengths)}{rptPara(content.developmentThemes)}
+                  {rptH("7. Summary of Development Recommendations")}
+                  {(content.devPriorities||[]).map((dp,i)=>(
+                    <div key={i} className="rp-avoid-break" style={{ marginBottom:"1rem", padding:"14px 16px", background:"#fafafa", borderRadius:8, border:"1px solid #eee" }}>
+                      <div style={{ fontWeight:700, fontSize:13, color:RPT_RED, marginBottom:8 }}>{dp.competency}</div>
+                      {[["70% — On the Job", dp.on70],["20% — Learning from Others", dp.social20],["10% — Formal Learning", dp.formal10]].map(([lbl,txt])=>(
+                        <p key={lbl} style={{ fontSize:12, color:"#333", margin:"0 0 4px" }}><strong>{lbl}: </strong>{txt}</p>
+                      ))}
+                    </div>
+                  ))}
+                  <div className="rp-page-break" />
+                  {rptH("8. Individual Participant Summaries")}
+                  {(content.participantSummaries||[]).map((ps,i)=>(
+                    <div key={i} className="rp-avoid-break" style={{ marginBottom:"1.25rem", padding:"14px 16px", background:"#fafafa", borderRadius:8, border:"1px solid #eee" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                        <span style={{ fontWeight:700 }}>{ps.name}</span>
+                        {ps.recommendation && <span style={{ fontSize:11, fontWeight:600, color:RPT_RED, background:"#fff7f7", border:"1px solid #fecaca", borderRadius:6, padding:"2px 8px" }}>{ps.recommendation}</span>}
+                      </div>
+                      {rptPara(ps.summary, { margin:0, fontSize:12 })}
+                    </div>
+                  ))}
+                  {rptH("9. Summary of Recommendations")}
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                    <thead>
+                      <tr style={{ background:"#f5f5f5" }}>
+                        {["Name","Level","Overall Score","Recommendation"].map(h=>(
+                          <th key={h} style={{ padding:"8px 10px", textAlign:"left", fontWeight:700, color:"#555", borderBottom:"2px solid #ddd" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cd.map((p,i)=>{
+                        const psum = (content.participantSummaries||[]).find(s=>s.name===p.name);
+                        return (
+                          <tr key={i} style={{ background:i%2===0?"#fafafa":"#fff" }}>
+                            <td style={{ padding:"8px 10px", fontWeight:600, borderBottom:"1px solid #f0f0f0" }}>{p.name}</td>
+                            <td style={{ padding:"8px 10px", color:"#555", borderBottom:"1px solid #f0f0f0" }}>{p.level}</td>
+                            <td style={{ padding:"8px 10px", fontWeight:700, color:scoreColor(p.overall), borderBottom:"1px solid #f0f0f0" }}>{fmtRp(p.overall)}</td>
+                            <td style={{ padding:"8px 10px", color:"#333", borderBottom:"1px solid #f0f0f0" }}>{psum?.recommendation || "–"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div style={{ display:"flex", height:"100%" }}>
+
+              {/* Report modal overlay */}
+              {rpReport && (
+                <>
+                  <div style={{ position:"fixed", inset:0, zIndex:999, background:"rgba(0,0,0,0.65)" }} />
+                  <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:1001, background:"#1a1a1a", padding:"10px 20px", display:"flex", alignItems:"center", gap:12 }}>
+                    <div style={{ color:"#fff", fontWeight:700, fontSize:13 }}>
+                      {rpReport.type === "individual" ? "Individual Report" : rpReport.type === "client" ? "Client Report" : "Cohort Report"}
+                      {" — "}{rpReport.selResult?.participant?.name || ""}
+                    </div>
+                    <div style={{ flex:1 }} />
+                    <button onClick={doPrint}
+                      style={{ background:"#fff", color:"#111", border:"none", borderRadius:6, padding:"7px 18px", fontWeight:700, fontSize:13, cursor:"pointer" }}>
+                      🖨 Print / Save as PDF
+                    </button>
+                    <button onClick={() => setRpReport(null)}
+                      style={{ background:"transparent", color:"#aaa", border:"1px solid #555", borderRadius:6, padding:"7px 14px", fontSize:12, cursor:"pointer" }}>
+                      ✕ Close
+                    </button>
+                  </div>
+                  <div id="rp-print-src" style={{ position:"fixed", top:50, left:"50%", transform:"translateX(-50%)", width:"min(794px, 97vw)", bottom:0, overflowY:"auto", background:"#fff", zIndex:1000 }}>
+                    {rpReport.type === "individual" && renderIndividualReport(rpReport.content, rpReport.selResult)}
+                    {rpReport.type === "client"     && renderClientReport(rpReport.content,     rpReport.selResult)}
+                    {rpReport.type === "cohort"     && renderCohortReport(rpReport.content,     rpReport.selResult)}
+                  </div>
+                </>
+              )}
 
               {/* Left sidebar — submission list */}
               <div style={{ width:300, borderRight:"1px solid #e5e5e5", background:"#fafafa", overflowY:"auto", flexShrink:0 }}>
@@ -3169,11 +3582,49 @@ ${compsHtml}
                       </div>
 
                       {/* Bottom save */}
-                      <div style={{ display:"flex", justifyContent:"flex-end", paddingBottom:"2rem" }}>
+                      <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:"1.5rem" }}>
                         <button onClick={saveRpScores} disabled={rpSaving}
                           style={S.btn(CCM_RED,"#fff",{ opacity:rpSaving?0.6:1, padding:"11px 28px" })}>
                           {rpSaving ? "Saving…" : "Save Scores"}
                         </button>
+                      </div>
+
+                      {/* Generate Reports */}
+                      <div style={{ ...S.card, marginBottom:"2rem" }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:CCM_RED, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"0.75rem" }}>
+                          Generate Reports
+                        </div>
+                        <p style={{ fontSize:12, color:"#888", marginBottom:"1rem" }}>
+                          Save scores before generating. Reports are AI-generated using Claude and may take 15–30 seconds.
+                        </p>
+                        <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                          {[
+                            { type:"individual", label:"Individual Report", desc:"Full report for the participant" },
+                            { type:"client",     label:"Client Report",     desc:"Formal summary for the client" },
+                            { type:"cohort",     label:"Cohort Report",     desc:"Group report for the whole cohort" },
+                          ].map(({ type, label, desc }) => (
+                            <button key={type}
+                              onClick={() => doGenerateReport(type)}
+                              disabled={rpReportLoading}
+                              style={{
+                                flex:1, minWidth:140, padding:"12px 14px", borderRadius:8, cursor: rpReportLoading ? "default" : "pointer",
+                                border: rpReportLoading && rpReportType===type ? `2px solid ${CCM_RED}` : "1.5px solid #ddd",
+                                background: rpReportLoading && rpReportType===type ? "#fff7f7" : "#fff",
+                                opacity: rpReportLoading && rpReportType!==type ? 0.45 : 1,
+                                textAlign:"left",
+                              }}>
+                              <div style={{ fontWeight:700, fontSize:13, color:CCM_RED, marginBottom:3 }}>
+                                {rpReportLoading && rpReportType===type ? "Generating…" : label}
+                              </div>
+                              <div style={{ fontSize:11, color:"#888" }}>{desc}</div>
+                            </button>
+                          ))}
+                        </div>
+                        {rpReportLoading && (
+                          <p style={{ fontSize:11, color:"#888", marginTop:"0.75rem", fontStyle:"italic" }}>
+                            Claude is writing the report — this usually takes 15–30 seconds…
+                          </p>
+                        )}
                       </div>
                     </div>
                   );

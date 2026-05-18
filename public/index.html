@@ -38,6 +38,19 @@
         /* Avoid breaking cards across pages */
         #ag-printable > div > div { break-inside: avoid; page-break-inside: avoid; }
 
+        /* ── Report print view ────────────────────────────────────────── */
+        /* body.rp-printing is set when printReport() injects content */
+        body.rp-printing > #root { display: none !important; }
+        body.rp-printing > #rp-print-inject {
+          display: block !important;
+          font-family: Arial, sans-serif;
+          font-size: 11pt;
+          color: #111;
+          margin: 0; padding: 0;
+        }
+        body.rp-printing > #rp-print-inject .rp-page-break { page-break-before: always !important; }
+        body.rp-printing > #rp-print-inject .rp-avoid-break { break-inside: avoid; page-break-inside: avoid; }
+
         /* Remove the second blank page that Chrome adds */
         html, body { height: auto !important; overflow: visible !important; }
         @page { margin: 16mm; size: A4 portrait; }
