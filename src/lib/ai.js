@@ -135,6 +135,13 @@ const AC_RULES = `AC Language Rules:
 - Scores: 1=Ineffective, 2=Inconsistent, 3=Effective, 4=Strong, 5=Exceptional
 - No em dashes. Formal, third-person tone.`;
 
+// Fixed boilerplate — injected into AI responses and pre-filled in manual edit mode
+export const BOILERPLATE_METHODOLOGY = "This assessment was conducted using CCM Consultancy's Assessment Centre methodology, combining structured behavioural questions and case study analysis. Competencies were assessed against standardised criteria across two components: Part 1 (Behavioural Questions) and Part 2 (Case Study Tasks), rated on a 1–5 scale where 1=Ineffective and 5=Exceptional.";
+
+export const BOILERPLATE_HOW_TO_USE = "This report provides the results of the Assessment Centre, along with scores, behavioural evidence, and a development plan for each competency assessed. It is intended to support a feedback conversation between the assessor and the participant. The development plan should be discussed and agreed upon collaboratively. Scores reflect observed behaviour during the assessment and should be considered alongside other performance data.";
+
+export const BOILERPLATE_ASSESSOR_DECLARATION = "This report was produced by CCM Consultancy following a structured Assessment Centre process. All ratings reflect assessor judgment based on observed behavioural evidence collected during the assessment. This report is confidential and intended solely for the use of the commissioning organisation.";
+
 export async function generateIndividualReport({ participant, level, cohort, module, questions, compList, scores, answers, part2Answers, completedAt }) {
   const compScores = buildCompScores(compList, questions, scores, answers, part2Answers, level);
   const overallVals = compScores.map(c => c.overall).filter(v => v !== null);
@@ -147,11 +154,11 @@ PARTICIPANT: ${participant.name} | Role: ${participant.role || "Not specified"} 
 COMPETENCY DATA:
 ${compScores.map(c => `[${c.name}] Score: ${c.overall ? c.overall.toFixed(1) : "N/A"} (${c.label})\n${c.qText}${c.p2Text ? `\nPart 2: ${c.p2Text}` : ""}${c.notes ? `\nNotes: ${c.notes}` : ""}`).join("\n\n")}`;
 
-  // Call 1 — sections 1–4 (no 70-20-10 here)
+  // Call 1 — sections 1 and 4 (assessmentMethodology and howToUse are fixed boilerplate)
   const prompt1 = `${header}
 
-Return ONLY valid JSON for sections 1-4:
-{"executiveSummary":"3-4 sentences","assessmentMethodology":"2 sentences on AC methodology","howToUse":"2 sentences on how to use this report","competencies":[{"name":"exact competency name","measures":"1 sentence on what this competency measures as a leadership behaviour","demonstrated":"2 sentences of specific behavioural evidence using AC language","strength":"1 sentence on observed strength","developmentOpportunity":"1 sentence on development area"}]}`;
+Return ONLY valid JSON:
+{"executiveSummary":"3-4 sentences tailored to this participant","competencies":[{"name":"exact competency name","measures":"1 sentence on what this competency measures as a leadership behaviour","demonstrated":"2 sentences of specific behavioural evidence using AC language — The candidate demonstrated...","strength":"1 sentence on observed strength","developmentOpportunity":"1 sentence on development area"}]}`;
 
   const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 1500 });
   if (!text1) throw new Error("No AI response (call 1)");
@@ -167,7 +174,12 @@ Return ONLY valid JSON for sections 5-7:
   if (!text2) throw new Error("No AI response (call 2)");
   const part2 = JSON.parse(text2.replace(/```json|```/g, "").trim());
 
-  return { ...part1, ...part2 };
+  return {
+    ...part1,
+    ...part2,
+    assessmentMethodology: BOILERPLATE_METHODOLOGY,
+    howToUse: BOILERPLATE_HOW_TO_USE,
+  };
 }
 
 export async function generateClientReport({ participant, level, cohort, module, questions, compList, scores, answers, part2Answers, completedAt, assessorName }) {
@@ -185,11 +197,11 @@ COMPETENCY SCORES:
 ${compScores.map(c => `[${c.name}] ${c.overall ? c.overall.toFixed(1) : "N/A"} (${c.label}) | Notes: ${c.notes || "None"}`).join("\n")}
 
 Return ONLY valid JSON:
-{"executiveSummary":"3-4 sentences","assessorDeclaration":"I confirm this assessment was conducted in line with CCM Consultancy assessment centre standards. [Assessor: ${assessorName || "CCM Consultancy"}]","competencies":[{"name":"exact name","evidence":"one concise sentence of evidence","developmentPriority":"one line development priority"}],"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","devSummary":[{"competency":"name","action":"one line recommended action"}],"recommendation":"one category only","recommendationNarrative":"2-3 formal sentences"}`;
+{"executiveSummary":"3-4 sentences","competencies":[{"name":"exact name","evidence":"one concise sentence of evidence","developmentPriority":"one line development priority"}],"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","devSummary":[{"competency":"name","action":"one line recommended action"}],"recommendation":"one category only","recommendationNarrative":"2-3 formal sentences"}`;
 
   const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 2000 });
   if (!text) throw new Error("No AI response");
-  return JSON.parse(text.replace(/```json|```/g, "").trim());
+  return { ...JSON.parse(text.replace(/```json|```/g, "").trim()), assessorDeclaration: BOILERPLATE_ASSESSOR_DECLARATION };
 }
 
 export async function generateCohortReport({ cohortName, moduleName, cohortData, compList, assessorName }) {
@@ -213,7 +225,7 @@ ${cohortData.map(p => `${p.name} (${p.level || "Unknown level"}): Overall ${p.ov
   const prompt1 = `${context}
 
 Return ONLY valid JSON for the narrative sections:
-{"executiveSummary":"3-4 sentences on overall cohort performance","assessorDeclaration":"I confirm all assessments were conducted in line with CCM Consultancy standards. [Assessor: ${assessorName || "CCM Consultancy"}]","competencyInsights":[{"name":"exact name","cohortObs":"2-3 sentences on cohort pattern for this competency"}],"overallStrengths":"2-3 sentences on cohort-wide strengths","developmentThemes":"2-3 sentences on cohort-wide development themes","devPriorities":[{"priority":"Theme name describing the development priority across the cohort","rationale":"1 sentence on why this is a priority for this cohort","on70":"one cohort-wide on-the-job action","social20":"one cohort-wide social or mentoring action","formal10":"one resource recommendation with title"},{"priority":"Second theme name","rationale":"1 sentence","on70":"one action","social20":"one action","formal10":"one resource with title"},{"priority":"Third theme name","rationale":"1 sentence","on70":"one action","social20":"one action","formal10":"one resource with title"}]}`;
+{"executiveSummary":"3-4 sentences on overall cohort performance","competencyInsights":[{"name":"exact name","cohortObs":"2-3 sentences on cohort pattern for this competency"}],"overallStrengths":"2-3 sentences on cohort-wide strengths","developmentThemes":"2-3 sentences on cohort-wide development themes","devPriorities":[{"priority":"Theme name describing the development priority across the cohort","rationale":"1 sentence on why this is a priority for this cohort","on70":"one cohort-wide on-the-job action","social20":"one cohort-wide social or mentoring action","formal10":"one resource recommendation with title"},{"priority":"Second theme name","rationale":"1 sentence","on70":"one action","social20":"one action","formal10":"one resource with title"},{"priority":"Third theme name","rationale":"1 sentence","on70":"one action","social20":"one action","formal10":"one resource with title"}]}`;
 
   const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 2000 });
   if (!text1) throw new Error("No AI response (call 1)");
@@ -231,7 +243,7 @@ Return ONLY valid JSON:
   if (!text2) throw new Error("No AI response (call 2)");
   const part2 = JSON.parse(text2.replace(/```json|```/g, "").trim());
 
-  return { ...part1, participantSummaries: part2.participantSummaries || [] };
+  return { ...part1, participantSummaries: part2.participantSummaries || [], assessorDeclaration: BOILERPLATE_ASSESSOR_DECLARATION };
 }
 
 // ─── PDF helpers ───────────────────────────────────────────────────────────────
