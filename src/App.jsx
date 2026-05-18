@@ -139,6 +139,9 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const [rpReport,        setRpReport]        = useState(null);
   const [rpReportLoading, setRpReportLoading] = useState(false);
   const [rpReportType,    setRpReportType]    = useState(null);
+  const [rpEditMode,      setRpEditMode]      = useState(false);
+  const [rpEditContent,   setRpEditContent]   = useState(null);
+  const [rpOrigContent,   setRpOrigContent]   = useState(null);
 
   // ─── Self-registration ────────────────────────────────────────────────────────
   const [loginMode,  setLoginMode]  = useState("signin"); // "signin" | "register"
@@ -2880,10 +2883,11 @@ ${compsHtml}
             if (!qsByComp[cId]) qsByComp[cId] = [];
             qsByComp[cId].push(q);
           });
-          // Use fetched competencies as the authoritative list; fall back to
-          // question-derived list if competencies haven't loaded yet.
+          // Only show competencies whose IDs actually appear in this module's questions.
+          // This is the authoritative filter — nothing outside this set should appear.
+          const usedCompIds = new Set(rpQuestions.map(q => q.competency_id).filter(Boolean));
           const baseComps = rpCompetencies.length > 0
-            ? rpCompetencies
+            ? rpCompetencies.filter(c => usedCompIds.has(c.id))
             : Object.values(rpQuestions.reduce((acc, q) => {
                 const cId = q.competency_id || "none";
                 if (!acc[cId]) acc[cId] = { id: cId, name: q.competency?.name || "Unknown Competency" };
@@ -3336,6 +3340,200 @@ ${compsHtml}
             );
           }
 
+          // ── Edit mode helpers ──────────────────────────────────────────────────
+          function makeEmptyContent(type) {
+            if (type === "individual") return {
+              executiveSummary:"", assessmentMethodology:"", howToUse:"",
+              competencies: compList.map(c => ({ name:c.name, evidence:"", strength:"", developmentOpportunity:"", on70:[""], social20:[""], formal10:[""] })),
+              overallStrengths:"", areasForDevelopment:"",
+              recommendation:"Recommended", recommendationNarrative:"",
+            };
+            if (type === "client") return {
+              executiveSummary:"", assessorDeclaration:"",
+              competencies: compList.map(c => ({ name:c.name, evidence:"", developmentPriority:"" })),
+              overallStrengths:"", areasForDevelopment:"",
+              devSummary: compList.map(c => ({ competency:c.name, action:"" })),
+              recommendation:"Recommended", recommendationNarrative:"",
+            };
+            return {
+              executiveSummary:"", assessorDeclaration:"",
+              competencyInsights: compList.map(c => ({ name:c.name, cohortObs:"" })),
+              overallStrengths:"", developmentThemes:"",
+              devPriorities: compList.slice(0,2).map(c => ({ competency:c.name, on70:"", social20:"", formal10:"" })),
+              participantSummaries: [],
+              _cohortData:[], _compList:compList.map(c=>c.name), _scoreLbl: v=>v===null?"–":Number(v).toFixed(1),
+            };
+          }
+          function closeReport() { setRpReport(null); setRpEditMode(false); setRpEditContent(null); setRpOrigContent(null); }
+          function enterEditMode() {
+            const copy = JSON.parse(JSON.stringify(rpReport.content));
+            setRpEditContent(copy);
+            if (!rpOrigContent) setRpOrigContent(JSON.parse(JSON.stringify(rpReport.content)));
+            setRpEditMode(true);
+          }
+          function saveEdits() { setRpReport(prev => ({ ...prev, content: JSON.parse(JSON.stringify(rpEditContent)) })); setRpEditMode(false); }
+          function resetToOriginal() { setRpEditContent(JSON.parse(JSON.stringify(rpOrigContent))); }
+          function openManualReport(type) {
+            if (!selResult) return;
+            const empty = makeEmptyContent(type);
+            setRpReport({ type, content: empty, selResult: { ...selResult }, compList, rpScores, rpQuestions, completedAt: selResult.completed_at });
+            setRpOrigContent(null);
+            setRpEditContent(JSON.parse(JSON.stringify(empty)));
+            setRpEditMode(true);
+          }
+
+          // ── Edit-mode render functions ─────────────────────────────────────────
+          const TA_STYLE = { width:"100%", padding:"8px 10px", fontSize:13, border:"1px solid #c0c0c0", borderRadius:6, resize:"vertical", lineHeight:1.6, fontFamily:"inherit", marginBottom:8, boxSizing:"border-box" };
+          const LBL = (text, color="#555") => <label style={{ fontSize:11, fontWeight:700, color, display:"block", marginBottom:4 }}>{text}</label>;
+          const REC_OPTS = ["Recommended","Recommended with Development","Deferred","Not Recommended"];
+          function ta(val, onChange, rows=3) {
+            return <textarea value={val||""} onChange={e=>onChange(e.target.value)} rows={rows} style={TA_STYLE} />;
+          }
+
+          function renderIndividualEdit() {
+            const ec = rpEditContent || {};
+            const upd = (f,v) => setRpEditContent(p=>({...p,[f]:v}));
+            const updComp = (i,f,v) => setRpEditContent(p=>{ const cs=[...(p.competencies||[])]; cs[i]={...cs[i],[f]:v}; return {...p,competencies:cs}; });
+            const updCompArr = (i,f,v) => setRpEditContent(p=>{ const cs=[...(p.competencies||[])]; cs[i]={...cs[i],[f]:v.split("\n").map(s=>s.trim()).filter(Boolean)}; return {...p,competencies:cs}; });
+            const sr = rpReport?.selResult;
+            return (
+              <div style={{ padding:"0 0 40px" }}>
+                {rptCoverHeader("Individual Assessment Report", sr?.participant, sr?.level, sr?.cohort, sr?.module, sr?.completed_at)}
+                <div style={{ padding:"0 28px" }}>
+                  {rptH("1. Executive Summary")}{ta(ec.executiveSummary, v=>upd("executiveSummary",v), 4)}
+                  {rptH("2. Assessment Methodology")}{ta(ec.assessmentMethodology, v=>upd("assessmentMethodology",v), 3)}
+                  {rptH("3. How to Use This Report")}{ta(ec.howToUse, v=>upd("howToUse",v), 2)}
+                  {rptH("4. Competencies Measured and Scores")}
+                  {(ec.competencies||[]).map((comp,i) => (
+                    <div key={i} style={{ marginBottom:"1.5rem", padding:"16px", background:"#fafafa", borderRadius:8, border:"1px solid #ddd" }}>
+                      <div style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>{comp.name}</div>
+                      {LBL("Evidence")}{ta(comp.evidence, v=>updComp(i,"evidence",v), 3)}
+                      {LBL("Strength","#16a34a")}{ta(comp.strength, v=>updComp(i,"strength",v), 2)}
+                      {LBL("Development Opportunity","#9a3412")}{ta(comp.developmentOpportunity, v=>updComp(i,"developmentOpportunity",v), 2)}
+                      {LBL("70% — On the Job (one action per line)")}{ta((comp.on70||[]).join("\n"), v=>updCompArr(i,"on70",v), 2)}
+                      {LBL("20% — Learning from Others (one per line)")}{ta((comp.social20||[]).join("\n"), v=>updCompArr(i,"social20",v), 2)}
+                      {LBL("10% — Formal Learning (one per line)")}{ta((comp.formal10||[]).join("\n"), v=>updCompArr(i,"formal10",v), 2)}
+                    </div>
+                  ))}
+                  {rptH("5. Overall Strengths and Areas for Development")}
+                  {LBL("Overall Strengths")}{ta(ec.overallStrengths, v=>upd("overallStrengths",v), 3)}
+                  {LBL("Areas for Development")}{ta(ec.areasForDevelopment, v=>upd("areasForDevelopment",v), 3)}
+                  {rptH("7. Result of Assessment")}
+                  {LBL("Recommendation")}
+                  <select value={ec.recommendation||"Recommended"} onChange={e=>upd("recommendation",e.target.value)}
+                    style={{ width:"100%", padding:"8px 10px", fontSize:13, border:"1px solid #c0c0c0", borderRadius:6, marginBottom:8 }}>
+                    {REC_OPTS.map(o=><option key={o}>{o}</option>)}
+                  </select>
+                  {LBL("Recommendation Narrative")}{ta(ec.recommendationNarrative, v=>upd("recommendationNarrative",v), 3)}
+                </div>
+              </div>
+            );
+          }
+
+          function renderClientEdit() {
+            const ec = rpEditContent || {};
+            const upd = (f,v) => setRpEditContent(p=>({...p,[f]:v}));
+            const updComp = (i,f,v) => setRpEditContent(p=>{ const cs=[...(p.competencies||[])]; cs[i]={...cs[i],[f]:v}; return {...p,competencies:cs}; });
+            const updDev = (i,f,v) => setRpEditContent(p=>{ const ds=[...(p.devSummary||[])]; ds[i]={...ds[i],[f]:v}; return {...p,devSummary:ds}; });
+            const sr = rpReport?.selResult;
+            return (
+              <div style={{ padding:"0 0 40px" }}>
+                {rptCoverHeader("Client Assessment Report", sr?.participant, sr?.level, sr?.cohort, sr?.module, sr?.completed_at)}
+                <div style={{ padding:"0 28px" }}>
+                  {rptH("1. Executive Summary")}{ta(ec.executiveSummary, v=>upd("executiveSummary",v), 4)}
+                  {rptH("2. Assessor Declaration")}{ta(ec.assessorDeclaration, v=>upd("assessorDeclaration",v), 3)}
+                  {rptH("4. Competencies Measured and Scores")}
+                  {(ec.competencies||[]).map((comp,i) => (
+                    <div key={i} style={{ marginBottom:"1.25rem", padding:"14px", background:"#fafafa", borderRadius:8, border:"1px solid #ddd" }}>
+                      <div style={{ fontWeight:700, fontSize:13, marginBottom:8 }}>{comp.name}</div>
+                      {LBL("Evidence (one sentence)")}{ta(comp.evidence, v=>updComp(i,"evidence",v), 2)}
+                      {LBL("Development Priority (one line)")}{ta(comp.developmentPriority, v=>updComp(i,"developmentPriority",v), 1)}
+                    </div>
+                  ))}
+                  {rptH("5. Overall Strengths and Areas for Development")}
+                  {LBL("Overall Strengths")}{ta(ec.overallStrengths, v=>upd("overallStrengths",v), 3)}
+                  {LBL("Areas for Development")}{ta(ec.areasForDevelopment, v=>upd("areasForDevelopment",v), 3)}
+                  {rptH("6. Summary of Individual Development Plan")}
+                  {(ec.devSummary||[]).map((row,i) => (
+                    <div key={i} style={{ marginBottom:8 }}>
+                      <div style={{ fontSize:12, fontWeight:600, color:"#555", marginBottom:4 }}>{row.competency}</div>
+                      {ta(row.action, v=>updDev(i,"action",v), 1)}
+                    </div>
+                  ))}
+                  {rptH("7. Summary and Recommendation")}
+                  {LBL("Recommendation")}
+                  <select value={ec.recommendation||"Recommended"} onChange={e=>upd("recommendation",e.target.value)}
+                    style={{ width:"100%", padding:"8px 10px", fontSize:13, border:"1px solid #c0c0c0", borderRadius:6, marginBottom:8 }}>
+                    {REC_OPTS.map(o=><option key={o}>{o}</option>)}
+                  </select>
+                  {LBL("Recommendation Narrative")}{ta(ec.recommendationNarrative, v=>upd("recommendationNarrative",v), 3)}
+                </div>
+              </div>
+            );
+          }
+
+          function renderCohortEdit() {
+            const ec = rpEditContent || {};
+            const upd = (f,v) => setRpEditContent(p=>({...p,[f]:v}));
+            const updCI = (i,f,v) => setRpEditContent(p=>{ const cs=[...(p.competencyInsights||[])]; cs[i]={...cs[i],[f]:v}; return {...p,competencyInsights:cs}; });
+            const updDP = (i,f,v) => setRpEditContent(p=>{ const ds=[...(p.devPriorities||[])]; ds[i]={...ds[i],[f]:v}; return {...p,devPriorities:ds}; });
+            const updPS = (i,f,v) => setRpEditContent(p=>{ const ps=[...(p.participantSummaries||[])]; ps[i]={...ps[i],[f]:v}; return {...p,participantSummaries:ps}; });
+            const sr = rpReport?.selResult;
+            return (
+              <div style={{ padding:"0 0 40px" }}>
+                <div>
+                  <div style={{ background:RPT_RED, padding:"18px 28px", display:"flex", alignItems:"center", gap:16 }}>
+                    <div>
+                      <div style={{ color:"#fff", fontWeight:900, fontSize:22, letterSpacing:-0.5 }}>CCM</div>
+                      <div style={{ color:"#fff", fontSize:9, letterSpacing:2.2, opacity:0.9 }}>CONSULTANCY</div>
+                    </div>
+                    <div style={{ flex:1 }} />
+                    <div style={{ color:"rgba(255,255,255,0.8)", fontSize:11 }}>CONFIDENTIAL</div>
+                  </div>
+                  <div style={{ padding:"28px 28px 20px", borderBottom:"1px solid #eee" }}>
+                    <div style={{ fontSize:22, fontWeight:700, color:"#111", marginBottom:6 }}>Cohort Assessment Report</div>
+                    <div style={{ fontSize:13, color:"#666" }}>Cohort: {sr?.cohort?.name} | Module: {sr?.module?.name||sr?.module?.title}</div>
+                  </div>
+                </div>
+                <div style={{ padding:"0 28px" }}>
+                  {rptH("1. Executive Summary")}{ta(ec.executiveSummary, v=>upd("executiveSummary",v), 4)}
+                  {rptH("2. Assessor Declaration")}{ta(ec.assessorDeclaration, v=>upd("assessorDeclaration",v), 2)}
+                  {rptH("4. Competencies Measured and Cohort Scores")}
+                  {(ec.competencyInsights||[]).map((ci,i) => (
+                    <div key={i} style={{ marginBottom:"1rem", padding:"14px", background:"#fafafa", borderRadius:8, border:"1px solid #ddd" }}>
+                      <div style={{ fontWeight:700, fontSize:13, marginBottom:6 }}>{ci.name}</div>
+                      {ta(ci.cohortObs, v=>updCI(i,"cohortObs",v), 3)}
+                    </div>
+                  ))}
+                  {rptH("6. Overall Strengths and Development Themes")}
+                  {LBL("Overall Strengths")}{ta(ec.overallStrengths, v=>upd("overallStrengths",v), 3)}
+                  {LBL("Development Themes")}{ta(ec.developmentThemes, v=>upd("developmentThemes",v), 3)}
+                  {rptH("7. Summary of Development Recommendations")}
+                  {(ec.devPriorities||[]).map((dp,i) => (
+                    <div key={i} style={{ marginBottom:"1rem", padding:"14px", background:"#fafafa", borderRadius:8, border:"1px solid #ddd" }}>
+                      <div style={{ fontWeight:700, fontSize:13, color:RPT_RED, marginBottom:8 }}>{dp.competency}</div>
+                      {LBL("70% — On the Job")}{ta(dp.on70, v=>updDP(i,"on70",v), 1)}
+                      {LBL("20% — Learning from Others")}{ta(dp.social20, v=>updDP(i,"social20",v), 1)}
+                      {LBL("10% — Formal Learning")}{ta(dp.formal10, v=>updDP(i,"formal10",v), 1)}
+                    </div>
+                  ))}
+                  {rptH("8. Individual Participant Summaries")}
+                  {(ec.participantSummaries||[]).map((ps,i) => (
+                    <div key={i} style={{ marginBottom:"1.25rem", padding:"14px", background:"#fafafa", borderRadius:8, border:"1px solid #ddd" }}>
+                      <div style={{ fontWeight:700, marginBottom:6 }}>{ps.name}</div>
+                      {LBL("Recommendation")}
+                      <select value={ps.recommendation||"Recommended"} onChange={e=>updPS(i,"recommendation",e.target.value)}
+                        style={{ width:"100%", padding:"8px 10px", fontSize:13, border:"1px solid #c0c0c0", borderRadius:6, marginBottom:8 }}>
+                        {REC_OPTS.map(o=><option key={o}>{o}</option>)}
+                      </select>
+                      {LBL("Summary")}{ta(ps.summary, v=>updPS(i,"summary",v), 4)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div style={{ display:"flex", height:"100%" }}>
 
@@ -3343,25 +3541,61 @@ ${compsHtml}
               {rpReport && (
                 <>
                   <div style={{ position:"fixed", inset:0, zIndex:999, background:"rgba(0,0,0,0.65)" }} />
-                  <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:1001, background:"#1a1a1a", padding:"10px 20px", display:"flex", alignItems:"center", gap:12 }}>
+                  {/* Toolbar */}
+                  <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:1001, background:"#1a1a1a", padding:"10px 20px", display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
                     <div style={{ color:"#fff", fontWeight:700, fontSize:13 }}>
                       {rpReport.type === "individual" ? "Individual Report" : rpReport.type === "client" ? "Client Report" : "Cohort Report"}
                       {" — "}{rpReport.selResult?.participant?.name || ""}
+                      {rpEditMode && <span style={{ marginLeft:8, fontSize:11, color:"#f59e0b", fontWeight:400 }}>✏ Editing</span>}
                     </div>
                     <div style={{ flex:1 }} />
                     <button onClick={doPrint}
-                      style={{ background:"#fff", color:"#111", border:"none", borderRadius:6, padding:"7px 18px", fontWeight:700, fontSize:13, cursor:"pointer" }}>
+                      style={{ background:"#fff", color:"#111", border:"none", borderRadius:6, padding:"6px 14px", fontWeight:700, fontSize:12, cursor:"pointer" }}>
                       🖨 Print / Save as PDF
                     </button>
-                    <button onClick={() => setRpReport(null)}
-                      style={{ background:"transparent", color:"#aaa", border:"1px solid #555", borderRadius:6, padding:"7px 14px", fontSize:12, cursor:"pointer" }}>
+                    {!rpEditMode ? (
+                      <button onClick={enterEditMode}
+                        style={{ background:"#374151", color:"#fff", border:"1px solid #6b7280", borderRadius:6, padding:"6px 14px", fontSize:12, cursor:"pointer" }}>
+                        ✏ Edit Report
+                      </button>
+                    ) : (
+                      <>
+                        <button onClick={saveEdits}
+                          style={{ background:"#16a34a", color:"#fff", border:"none", borderRadius:6, padding:"6px 14px", fontWeight:700, fontSize:12, cursor:"pointer" }}>
+                          ✓ Save Edits
+                        </button>
+                        {rpOrigContent && (
+                          <button onClick={resetToOriginal}
+                            style={{ background:"#374151", color:"#e5e7eb", border:"1px solid #6b7280", borderRadius:6, padding:"6px 14px", fontSize:12, cursor:"pointer" }}>
+                            ↺ Reset to AI Draft
+                          </button>
+                        )}
+                        <button onClick={() => setRpEditMode(false)}
+                          style={{ background:"transparent", color:"#9ca3af", border:"1px solid #555", borderRadius:6, padding:"6px 12px", fontSize:12, cursor:"pointer" }}>
+                          ← View
+                        </button>
+                      </>
+                    )}
+                    <button onClick={closeReport}
+                      style={{ background:"transparent", color:"#aaa", border:"1px solid #555", borderRadius:6, padding:"6px 12px", fontSize:12, cursor:"pointer" }}>
                       ✕ Close
                     </button>
                   </div>
+                  {/* Content */}
                   <div id="rp-print-src" style={{ position:"fixed", top:50, left:"50%", transform:"translateX(-50%)", width:"min(794px, 97vw)", bottom:0, overflowY:"auto", background:"#fff", zIndex:1000 }}>
-                    {rpReport.type === "individual" && renderIndividualReport(rpReport.content, rpReport.selResult)}
-                    {rpReport.type === "client"     && renderClientReport(rpReport.content,     rpReport.selResult)}
-                    {rpReport.type === "cohort"     && renderCohortReport(rpReport.content,     rpReport.selResult)}
+                    {rpEditMode ? (
+                      <>
+                        {rpReport.type === "individual" && renderIndividualEdit()}
+                        {rpReport.type === "client"     && renderClientEdit()}
+                        {rpReport.type === "cohort"     && renderCohortEdit()}
+                      </>
+                    ) : (
+                      <>
+                        {rpReport.type === "individual" && renderIndividualReport(rpReport.content, rpReport.selResult)}
+                        {rpReport.type === "client"     && renderClientReport(rpReport.content,     rpReport.selResult)}
+                        {rpReport.type === "cohort"     && renderCohortReport(rpReport.content,     rpReport.selResult)}
+                      </>
+                    )}
                   </div>
                 </>
               )}
@@ -3594,26 +3828,27 @@ ${compsHtml}
                         <div style={{ fontSize:11, fontWeight:700, color:CCM_RED, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"0.75rem" }}>
                           Generate Reports
                         </div>
-                        <p style={{ fontSize:12, color:"#888", marginBottom:"1rem" }}>
-                          Save scores before generating. Reports are AI-generated using Claude and may take 15–30 seconds.
+                        <p style={{ fontSize:12, color:"#888", marginBottom:"0.75rem" }}>
+                          Save scores before generating. AI reports take 15–30 seconds.
                         </p>
-                        <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                        {/* AI-generated row */}
+                        <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginBottom:"0.75rem" }}>
                           {[
-                            { type:"individual", label:"Individual Report", desc:"Full report for the participant" },
-                            { type:"client",     label:"Client Report",     desc:"Formal summary for the client" },
-                            { type:"cohort",     label:"Cohort Report",     desc:"Group report for the whole cohort" },
+                            { type:"individual", label:"Individual Report", desc:"Full AI report for participant" },
+                            { type:"client",     label:"Client Report",     desc:"Concise AI report for client" },
+                            { type:"cohort",     label:"Cohort Report",     desc:"AI group report for cohort" },
                           ].map(({ type, label, desc }) => (
                             <button key={type}
                               onClick={() => doGenerateReport(type)}
                               disabled={rpReportLoading}
                               style={{
-                                flex:1, minWidth:140, padding:"12px 14px", borderRadius:8, cursor: rpReportLoading ? "default" : "pointer",
+                                flex:1, minWidth:130, padding:"11px 12px", borderRadius:8, cursor: rpReportLoading ? "default" : "pointer",
                                 border: rpReportLoading && rpReportType===type ? `2px solid ${CCM_RED}` : "1.5px solid #ddd",
                                 background: rpReportLoading && rpReportType===type ? "#fff7f7" : "#fff",
                                 opacity: rpReportLoading && rpReportType!==type ? 0.45 : 1,
                                 textAlign:"left",
                               }}>
-                              <div style={{ fontWeight:700, fontSize:13, color:CCM_RED, marginBottom:3 }}>
+                              <div style={{ fontWeight:700, fontSize:13, color:CCM_RED, marginBottom:2 }}>
                                 {rpReportLoading && rpReportType===type ? "Generating…" : label}
                               </div>
                               <div style={{ fontSize:11, color:"#888" }}>{desc}</div>
@@ -3621,10 +3856,28 @@ ${compsHtml}
                           ))}
                         </div>
                         {rpReportLoading && (
-                          <p style={{ fontSize:11, color:"#888", marginTop:"0.75rem", fontStyle:"italic" }}>
+                          <p style={{ fontSize:11, color:"#888", marginBottom:"0.5rem", fontStyle:"italic" }}>
                             Claude is writing the report — this usually takes 15–30 seconds…
                           </p>
                         )}
+                        {/* Write Manually row */}
+                        <div style={{ borderTop:"1px solid #f0f0f0", paddingTop:"0.75rem" }}>
+                          <div style={{ fontSize:11, color:"#aaa", marginBottom:6 }}>Write Manually — fill in each section yourself</div>
+                          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                            {[
+                              { type:"individual", label:"Individual" },
+                              { type:"client",     label:"Client" },
+                              { type:"cohort",     label:"Cohort" },
+                            ].map(({ type, label }) => (
+                              <button key={type}
+                                onClick={() => openManualReport(type)}
+                                disabled={rpReportLoading}
+                                style={{ padding:"7px 14px", borderRadius:6, fontSize:12, fontWeight:600, cursor:"pointer", border:"1.5px solid #e0e7ef", background:"#f8fafc", color:"#374151" }}>
+                                ✏ {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
