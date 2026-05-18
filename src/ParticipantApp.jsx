@@ -298,7 +298,115 @@ function Part2TransitionScreen({ participant, tabSwitches, onBeginPart2, onSignO
   );
 }
 
-// ─── Scenario Panel (left) ────────────────────────────────────────────────────
+// ─── Part 1 Screen (full-width, no case study) ───────────────────────────────
+function Part1Screen({ moduleTitle, moduleIdx, moduleCount, questions, competencies, currentQIdx, setCurrentQIdx, answers, setAnswers, moduleType, timeLeft, onShowSubmit }) {
+  const q = questions[currentQIdx];
+  const isLast = currentQIdx === questions.length - 1;
+  const timerUrgent = timeLeft !== null && timeLeft < 300;
+  const comp = (competencies || []).find(c => c.id === q?.competency_id);
+
+  function handlePaste(e) { e.preventDefault(); }
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto", background: "#f7f8fa" }}>
+      {/* Sub-header: module info + timer + label */}
+      <div style={{ background: "#fff", borderBottom: "1px solid #eee", padding: "12px 2.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+            Module {moduleIdx + 1} of {moduleCount}
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#111", marginTop: 2 }}>{moduleTitle}</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {timeLeft !== null && (
+            <div style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 700, color: timerUrgent ? "#dc2626" : "#111", background: timerUrgent ? "#fef2f2" : "#f5f5f5", padding: "5px 13px", borderRadius: 8, border: `1px solid ${timerUrgent ? "#fca5a5" : "#e5e5e5"}`, letterSpacing: "0.05em", animation: timerUrgent ? "blink 1.2s step-end infinite" : "none" }}>
+              {formatTime(timeLeft)}
+            </div>
+          )}
+          <span style={{ fontSize: 12, color: "#aaa", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Part 1 — Behavioral Questions
+          </span>
+          {isLast && questions.length > 0 && (
+            <button onClick={onShowSubmit} style={btn(CCM_RED, "#fff", { fontSize: 12, padding: "6px 14px" })}>
+              {moduleType === "both" ? "Submit Part 1" : "Submit"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Question body — centred, max-width container */}
+      <div style={{ flex: 1, maxWidth: 860, margin: "0 auto", width: "100%", padding: "2.5rem 2rem 3rem" }}>
+        {questions.length === 0 ? (
+          <div style={{ color: "#aaa", textAlign: "center", fontSize: 14 }}>No questions found for this module.</div>
+        ) : (
+          <>
+            {/* Progress dots */}
+            <div style={{ display: "flex", gap: 6, marginBottom: "1.75rem", flexWrap: "wrap" }}>
+              {questions.map((qu, i) => (
+                <div key={i} title={`Question ${i + 1}`}
+                  style={{ width: 10, height: 10, borderRadius: "50%", cursor: "pointer", background: i === currentQIdx ? CCM_RED : answers[questions[i]?.id] ? "#16a34a" : "#ddd", transition: "background 0.2s" }}
+                  onClick={() => setCurrentQIdx(i)}
+                />
+              ))}
+            </div>
+
+            {/* Competency tag + question number */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              {comp && (
+                <span style={{ fontSize: 11, fontWeight: 700, background: "#fef2f2", color: CCM_RED, borderRadius: 6, padding: "3px 10px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  {comp.name}
+                </span>
+              )}
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Question {currentQIdx + 1} of {questions.length}
+              </span>
+            </div>
+
+            {q && (
+              <>
+                <p style={{ fontFamily: SERIF, fontSize: 20, lineHeight: 1.65, color: "#111", margin: "0 0 1.5rem" }}>
+                  {q.text}
+                </p>
+
+                <textarea
+                  style={{ ...TEXTAREA, minHeight: 220 }}
+                  value={answers[q.id] || ""}
+                  onChange={e => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                  onPaste={handlePaste}
+                  placeholder="Type your response here… (copy and paste is disabled)"
+                />
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1.5rem", gap: 12 }}>
+                  <button
+                    onClick={() => setCurrentQIdx(i => Math.max(0, i - 1))}
+                    disabled={currentQIdx === 0}
+                    style={btn("#fff", "#444", { opacity: currentQIdx === 0 ? 0.35 : 1, cursor: currentQIdx === 0 ? "default" : "pointer" })}
+                  >
+                    ← Previous
+                  </button>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    {!isLast && (
+                      <button onClick={() => setCurrentQIdx(i => Math.min(questions.length - 1, i + 1))} style={btn(CCM_RED, "#fff")}>
+                        Next →
+                      </button>
+                    )}
+                    {isLast && (
+                      <button onClick={onShowSubmit} style={btn(CCM_RED, "#fff")}>
+                        {moduleType === "both" ? "Submit Part 1" : "Submit Assessment"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Scenario Panel (left — Part 2 only) ─────────────────────────────────────
 function ScenarioPanel({ scenario, moduleTitle, moduleIdx, moduleCount, assessPhase, readingTimeLeft }) {
   const readingDone = readingTimeLeft <= 0;
 
@@ -335,7 +443,7 @@ function ScenarioPanel({ scenario, moduleTitle, moduleIdx, moduleCount, assessPh
           <>
             <span style={{ fontSize: 15 }}>📖</span>
             <span style={{ fontSize: 13, fontWeight: 600, color: "#92400e" }}>
-              Please read the case study before answering. Time remaining:{" "}
+              Please read the case study. Time remaining:{" "}
               <span style={{ fontFamily: "monospace", fontSize: 14 }}>{formatTime(readingTimeLeft)}</span>
             </span>
           </>
@@ -574,7 +682,7 @@ function PresentationPanel({ presentationAnswers, setPresentationAnswers, upload
 }
 
 // ─── Part 2 Panel (right) ─────────────────────────────────────────────────────
-function Part2Panel({ answer, setAnswer, fileUrl, uploading, onUpload, onSubmit, taskBrief }) {
+function Part2Panel({ answer, setAnswer, fileUrl, uploading, onUpload, onSubmit, taskBrief, readingLocked }) {
   const fileInputRef = useRef(null);
   function handlePaste(e) { e.preventDefault(); }
 
@@ -592,12 +700,18 @@ function Part2Panel({ answer, setAnswer, fileUrl, uploading, onUpload, onSubmit,
       </div>
 
       <textarea
-        style={{ ...TEXTAREA, minHeight: 280 }}
+        style={{ ...TEXTAREA, minHeight: 280, opacity: readingLocked ? 0.45 : 1, cursor: readingLocked ? "not-allowed" : "text" }}
         value={answer}
-        onChange={e => setAnswer(e.target.value)}
+        onChange={e => !readingLocked && setAnswer(e.target.value)}
         onPaste={handlePaste}
-        placeholder="Type your response here… (copy and paste is disabled)"
+        disabled={readingLocked}
+        placeholder={readingLocked ? "Answer unlocks after reading time ends" : "Type your response here… (copy and paste is disabled)"}
       />
+      {readingLocked && (
+        <div style={{ marginTop: 8, fontSize: 12, color: "#b45309", fontWeight: 600, textAlign: "center" }}>
+          Answer unlocks after reading time ends
+        </div>
+      )}
 
       <div style={{ marginTop: "1.5rem", marginBottom: "1.5rem" }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
@@ -660,7 +774,9 @@ export default function ParticipantApp() {
   const [part2Uploading, setPart2Uploading] = useState(false);
 
   // Anti-cheat
-  const tabSwitchesRef = useRef(0);
+  const tabSwitchesRef   = useRef(0);
+  const part1TabSwitches = useRef(0);
+  const part2TabSwitches = useRef(0);
   const [tabSwitches, setTabSwitches]     = useState(0);
   const [showTabWarning, setShowTabWarning] = useState(false);
 
@@ -668,8 +784,9 @@ export default function ParticipantApp() {
   const [timeLeft, setTimeLeft]           = useState(null);
   const [readingTimeLeft, setReadingTimeLeft] = useState(0);
   const [timerActive, setTimerActive]     = useState(false);
-  const startTimeRef    = useRef(null); // Date.now() when module began
-  const moduleDurationRef = useRef(0);  // total module seconds
+  const startTimeRef       = useRef(null); // Date.now() when module/part began
+  const moduleDurationRef  = useRef(0);    // total module seconds
+  const readingDurationRef = useRef(0);    // reading lock seconds (0 = no lock)
 
   // Submission
   const [showSubmitModal, setShowSubmitModal] = useState(false);
@@ -742,18 +859,20 @@ export default function ParticipantApp() {
     document.body.style.userSelect = "none";
   }
 
-  // ── Tab switch detection ──────────────────────────────────────────────────────
+  // ── Tab switch detection — active in both Part 1 and Part 2 ──────────────────
   useEffect(() => {
     if (screen !== "assessment") return;
     const onVis = () => {
       if (document.visibilityState === "hidden") return;
       tabSwitchesRef.current += 1;
+      if (assessPhase === "part2") part2TabSwitches.current += 1;
+      else part1TabSwitches.current += 1;
       setTabSwitches(tabSwitchesRef.current);
       setShowTabWarning(true);
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
-  }, [screen]);
+  }, [screen, assessPhase]);
 
   // ── Unified timer — one interval, both countdowns derived from shared timestamp ─
   useEffect(() => {
@@ -761,7 +880,7 @@ export default function ParticipantApp() {
     const interval = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
       const newTimeLeft    = Math.max(0, moduleDurationRef.current - elapsed);
-      const newReadingLeft = Math.max(0, READING_SECONDS - elapsed);
+      const newReadingLeft = Math.max(0, readingDurationRef.current - elapsed);
       setTimeLeft(newTimeLeft);
       setReadingTimeLeft(newReadingLeft);
       if (newTimeLeft <= 0) { clearInterval(interval); setTimerActive(false); }
@@ -771,10 +890,12 @@ export default function ParticipantApp() {
 
   function startModuleTimer(mod) {
     const minutes = mod?.time_limit || 60;
-    moduleDurationRef.current = minutes * 60;
+    moduleDurationRef.current  = minutes * 60;
+    readingDurationRef.current = 0; // Part 1 has no reading lock
+    part1TabSwitches.current   = 0;
     startTimeRef.current = Date.now();
     setTimeLeft(minutes * 60);
-    setReadingTimeLeft(READING_SECONDS);
+    setReadingTimeLeft(0);
     setTimerActive(true);
   }
 
@@ -834,7 +955,9 @@ export default function ParticipantApp() {
     setTimeLeft(null);
     setReadingTimeLeft(0);
     setTimerActive(false);
-    tabSwitchesRef.current = 0;
+    tabSwitchesRef.current   = 0;
+    part1TabSwitches.current = 0;
+    part2TabSwitches.current = 0;
     setTabSwitches(0);
     setCompletionTimeSec(0);
   }
@@ -858,11 +981,14 @@ export default function ParticipantApp() {
   }
 
   function beginPart2() {
-    const taskMins = getTaskMins(currentModule, session?.level);
-    moduleDurationRef.current = taskMins * 60;
+    const taskMins    = getTaskMins(currentModule, session?.level);
+    const readingSecs = (currentModule?.reading_time_mins || 5) * 60;
+    moduleDurationRef.current  = taskMins * 60;
+    readingDurationRef.current = readingSecs;
+    part2TabSwitches.current   = 0;
     startTimeRef.current = Date.now();
     setTimeLeft(taskMins * 60);
-    setReadingTimeLeft(0);
+    setReadingTimeLeft(readingSecs);
     setTimerActive(true);
     setAssessPhase("part2");
   }
@@ -910,9 +1036,10 @@ export default function ParticipantApp() {
       if (assessPhase === "part2") {
         // Save Part 2 answers into the existing result row
         await db.savePart2Result(participant.id, currentModule.id, {
-          written_response:   part2Answer,
-          uploaded_file_url:  part2FileUrl,
-          time_taken:         timeSpent,
+          written_response:      part2Answer,
+          uploaded_file_url:     part2FileUrl,
+          time_taken:            timeSpent,
+          tab_switches_part2:    part2TabSwitches.current,
         });
         advanceToNextModule();
       } else {
@@ -920,7 +1047,7 @@ export default function ParticipantApp() {
         await db.saveResult(
           participant.id,
           currentModule.id,
-          { questions: answers, presentation: presentationAnswers, uploaded_file_url: uploadedFileUrl, tab_switches: tabSwitchesRef.current },
+          { questions: answers, presentation: presentationAnswers, uploaded_file_url: uploadedFileUrl, tab_switches: tabSwitchesRef.current, tab_switches_part1: part1TabSwitches.current },
           timeSpent,
           []
         );
@@ -979,190 +1106,141 @@ export default function ParticipantApp() {
     );
   }
 
-  // ── Assessment screen (split panel) ──────────────────────────────────────────
-  const mt        = currentModule?.module_type || "questions";
-  const questions = currentModule?.questions   || [];
-  const scenario  = currentModule?.scenario    || null;
-
+  // ── Assessment screen ─────────────────────────────────────────────────────────
+  const mt          = currentModule?.module_type || "questions";
+  const questions   = currentModule?.questions   || [];
+  const competencies = currentModule?.competencies || [];
+  const scenario    = currentModule?.scenario    || null;
   const timerUrgent = timeLeft !== null && timeLeft < 300;
+
+  // Shared header used in all assessment phases
+  const assessHeader = (
+    <header style={{
+      height: HEADER_H,
+      background: "#fff",
+      borderBottom: "1px solid #e8e8e8",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: "0 1.5rem",
+      flexShrink: 0,
+      zIndex: 50,
+      boxShadow: "0 1px 6px rgba(0,0,0,.05)",
+    }}>
+      <CCMLogo />
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        {tabSwitches > 0 && (
+          <div style={{ fontSize: 12, color: "#dc2626", background: "#fef2f2", padding: "4px 10px", borderRadius: 20, border: "1px solid #fca5a5", fontWeight: 600 }}>
+            ⚠ {tabSwitches} tab switch{tabSwitches !== 1 ? "es" : ""}
+          </div>
+        )}
+        <span style={{ fontSize: 13, color: "#666" }}>{participant?.name || participant?.username}</span>
+        <button onClick={signOut} style={btn("#fff", "#555", { fontSize: 12, padding: "6px 14px" })}>Sign out</button>
+      </div>
+    </header>
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: SANS, overflow: "hidden" }}>
       <style>{FONTS}</style>
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header style={{
-        height: HEADER_H,
-        background: "#fff",
-        borderBottom: "1px solid #e8e8e8",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 1.5rem",
-        flexShrink: 0,
-        zIndex: 50,
-        boxShadow: "0 1px 6px rgba(0,0,0,.05)",
-      }}>
-        <CCMLogo />
+      {assessHeader}
 
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {tabSwitches > 0 && (
-            <div style={{ fontSize: 12, color: "#dc2626", background: "#fef2f2", padding: "4px 10px", borderRadius: 20, border: "1px solid #fca5a5", fontWeight: 600 }}>
-              ⚠ {tabSwitches} tab switch{tabSwitches !== 1 ? "es" : ""}
-            </div>
-          )}
-          <span style={{ fontSize: 13, color: "#666" }}>{participant?.name || participant?.username}</span>
-          <button
-            onClick={signOut}
-            style={btn("#fff", "#555", { fontSize: 12, padding: "6px 14px" })}
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
+      {/* ── Part 1 — full-width, no case study ─────────────────────────────── */}
+      {assessPhase === "questions" && (
+        <Part1Screen
+          moduleTitle={currentModule?.title}
+          moduleIdx={currentModuleIdx}
+          moduleCount={modules.length}
+          questions={questions}
+          competencies={competencies}
+          currentQIdx={currentQIdx}
+          setCurrentQIdx={setCurrentQIdx}
+          answers={answers}
+          setAnswers={setAnswers}
+          moduleType={mt}
+          timeLeft={timeLeft}
+          onShowSubmit={() => setShowSubmitModal(true)}
+        />
+      )}
 
-      {/* ── Split body ─────────────────────────────────────────────────────── */}
-      <div ref={containerRef} style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+      {/* ── Part 2 / Presentation — split panel with case study ────────────── */}
+      {(assessPhase === "part2" || assessPhase === "presentation") && (
+        <div ref={containerRef} style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
-        {/* LEFT PANEL — case study */}
-        <div
-          style={{
-            width: `${leftWidth}%`,
-            minWidth: "25%",
-            maxWidth: "75%",
-            overflowY: "auto",
-            background: "#f7f8fa",
-            borderRight: "none",
-            flexShrink: 0,
-          }}
-        >
-          <ScenarioPanel
-            scenario={scenario}
-            moduleTitle={currentModule?.title}
-            moduleIdx={currentModuleIdx}
-            moduleCount={modules.length}
-            assessPhase={assessPhase}
-            readingTimeLeft={readingTimeLeft}
-          />
-        </div>
-
-        {/* DRAG HANDLE */}
-        <div
-          onMouseDown={startDrag}
-          style={{
-            width: 6,
-            flexShrink: 0,
-            background: "#e8e8e8",
-            cursor: "col-resize",
-            position: "relative",
-            transition: "background 0.15s",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-          title="Drag to resize"
-        >
-          {/* Grip dots */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {[0, 1, 2, 3, 4].map(i => (
-              <div key={i} style={{ width: 3, height: 3, borderRadius: "50%", background: "#bbb" }} />
-            ))}
+          {/* LEFT PANEL — case study */}
+          <div style={{ width: `${leftWidth}%`, minWidth: "25%", maxWidth: "75%", overflowY: "auto", background: "#f7f8fa", flexShrink: 0 }}>
+            <ScenarioPanel
+              scenario={scenario}
+              moduleTitle={currentModule?.title}
+              moduleIdx={currentModuleIdx}
+              moduleCount={modules.length}
+              assessPhase={assessPhase}
+              readingTimeLeft={readingTimeLeft}
+            />
           </div>
-        </div>
 
-        {/* RIGHT PANEL — timer + questions */}
-        <div style={{ flex: 1, minWidth: "25%", display: "flex", flexDirection: "column", overflowY: "auto", background: "#fff" }}>
-
-          {/* Sticky timer bar */}
-          <div style={{
-            position: "sticky",
-            top: 0,
-            zIndex: 20,
-            background: "#fff",
-            borderBottom: "1px solid #f0f0f0",
-            padding: "10px 2rem",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 16,
-            flexShrink: 0,
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {/* Timer */}
-              {timeLeft !== null && (
-                <div style={{
-                  fontFamily: "monospace",
-                  fontSize: 18,
-                  fontWeight: 700,
-                  color: timerUrgent ? "#dc2626" : "#111",
-                  background: timerUrgent ? "#fef2f2" : "#f5f5f5",
-                  padding: "5px 13px",
-                  borderRadius: 8,
-                  border: `1px solid ${timerUrgent ? "#fca5a5" : "#e5e5e5"}`,
-                  letterSpacing: "0.05em",
-                  animation: timerUrgent ? "blink 1.2s step-end infinite" : "none",
-                }}>
-                  {formatTime(timeLeft)}
-                </div>
-              )}
-              <span style={{ fontSize: 12, color: "#aaa", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                {assessPhase === "presentation" ? "Presentation Task"
-                  : assessPhase === "part2"    ? "Part 2 — Tasks"
-                  : `Q${currentQIdx + 1} / ${questions.length}`}
-              </span>
+          {/* DRAG HANDLE */}
+          <div
+            onMouseDown={startDrag}
+            style={{ width: 6, flexShrink: 0, background: "#e8e8e8", cursor: "col-resize", display: "flex", alignItems: "center", justifyContent: "center" }}
+            title="Drag to resize"
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {[0, 1, 2, 3, 4].map(i => (
+                <div key={i} style={{ width: 3, height: 3, borderRadius: "50%", background: "#bbb" }} />
+              ))}
             </div>
+          </div>
 
-            {/* Submit button shortcut */}
-            {assessPhase === "questions" && currentQIdx === questions.length - 1 && questions.length > 0 && (
-              <button onClick={() => setShowSubmitModal(true)} style={btn(CCM_RED, "#fff", { fontSize: 12, padding: "6px 14px" })}>
-                {mt === "both" ? "Submit Part 1" : "Submit"}
-              </button>
-            )}
-            {(assessPhase === "presentation" || assessPhase === "part2") && (
+          {/* RIGHT PANEL — timer + content */}
+          <div style={{ flex: 1, minWidth: "25%", display: "flex", flexDirection: "column", overflowY: "auto", background: "#fff" }}>
+
+            {/* Sticky timer bar */}
+            <div style={{ position: "sticky", top: 0, zIndex: 20, background: "#fff", borderBottom: "1px solid #f0f0f0", padding: "10px 2rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexShrink: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                {timeLeft !== null && (
+                  <div style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 700, color: timerUrgent ? "#dc2626" : "#111", background: timerUrgent ? "#fef2f2" : "#f5f5f5", padding: "5px 13px", borderRadius: 8, border: `1px solid ${timerUrgent ? "#fca5a5" : "#e5e5e5"}`, letterSpacing: "0.05em", animation: timerUrgent ? "blink 1.2s step-end infinite" : "none" }}>
+                    {formatTime(timeLeft)}
+                  </div>
+                )}
+                <span style={{ fontSize: 12, color: "#aaa", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  {assessPhase === "presentation" ? "Presentation Task" : "Part 2 — Case Study"}
+                </span>
+              </div>
               <button onClick={() => setShowSubmitModal(true)} style={btn(CCM_RED, "#fff", { fontSize: 12, padding: "6px 14px" })}>
                 Submit
               </button>
+            </div>
+
+            {/* Part 2 content */}
+            {assessPhase === "part2" && (
+              <Part2Panel
+                answer={part2Answer}
+                setAnswer={setPart2Answer}
+                fileUrl={part2FileUrl}
+                uploading={part2Uploading}
+                onUpload={handlePart2Upload}
+                onSubmit={() => setShowSubmitModal(true)}
+                taskBrief={currentModule?.task_brief || ""}
+                readingLocked={readingTimeLeft > 0}
+              />
+            )}
+
+            {/* Presentation content */}
+            {assessPhase === "presentation" && (
+              <PresentationPanel
+                presentationAnswers={presentationAnswers}
+                setPresentationAnswers={setPresentationAnswers}
+                uploadedFileUrl={uploadedFileUrl}
+                uploading={uploading}
+                onUpload={handleFileUpload}
+                onSubmit={() => setShowSubmitModal(true)}
+              />
             )}
           </div>
-
-          {/* Content */}
-          {assessPhase === "questions" && (
-            <QuestionPanel
-              questions={questions}
-              currentQIdx={currentQIdx}
-              setCurrentQIdx={setCurrentQIdx}
-              answers={answers}
-              setAnswers={setAnswers}
-              moduleType={mt}
-              readingLocked={readingTimeLeft > 0}
-              onSubmit={() => setShowSubmitModal(true)}
-            />
-          )}
-
-          {assessPhase === "presentation" && (
-            <PresentationPanel
-              presentationAnswers={presentationAnswers}
-              setPresentationAnswers={setPresentationAnswers}
-              uploadedFileUrl={uploadedFileUrl}
-              uploading={uploading}
-              onUpload={handleFileUpload}
-              onSubmit={() => setShowSubmitModal(true)}
-            />
-          )}
-
-          {assessPhase === "part2" && (
-            <Part2Panel
-              answer={part2Answer}
-              setAnswer={setPart2Answer}
-              fileUrl={part2FileUrl}
-              uploading={part2Uploading}
-              onUpload={handlePart2Upload}
-              onSubmit={() => setShowSubmitModal(true)}
-              taskBrief={currentModule?.task_brief || ""}
-            />
-          )}
         </div>
-      </div>
+      )}
 
       {/* ── Tab warning modal ────────────────────────────────────────────────── */}
       {showTabWarning && (
@@ -1185,9 +1263,13 @@ export default function ParticipantApp() {
       {showSubmitModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div style={{ background: "#fff", borderRadius: 16, padding: "2rem", maxWidth: 440, width: "90%", boxShadow: "0 8px 40px rgba(0,0,0,.2)" }}>
-            <h2 style={{ fontFamily: SERIF, fontSize: 22, marginBottom: "0.75rem", color: "#111" }}>Submit Assessment?</h2>
+            <h2 style={{ fontFamily: SERIF, fontSize: 22, marginBottom: "0.75rem", color: "#111" }}>
+              {assessPhase === "questions" ? "Submit Part 1?" : "Submit Assessment?"}
+            </h2>
             <p style={{ fontSize: 14, color: "#555", marginBottom: "1.5rem", lineHeight: 1.7 }}>
-              Once submitted, you will not be able to change your answers. Please make sure you are happy with your responses before continuing.
+              {assessPhase === "questions" && mt === "both"
+                ? "Once submitted, you will not be able to change your answers. You will move to a short break before Part 2 begins."
+                : "Once submitted, you will not be able to change your answers. Please make sure you are happy with your responses before continuing."}
             </p>
             <div style={{ display: "flex", gap: 12 }}>
               <button onClick={() => setShowSubmitModal(false)} disabled={submitting} style={btn("#fff", "#333", { flex: 1 })}>
