@@ -2964,9 +2964,29 @@ ${compsHtml}
             if (!src) return;
             const prev = document.getElementById("rp-print-inject");
             if (prev) document.body.removeChild(prev);
+            // Clone the live DOM so we can replace form elements with static content
+            const srcClone = src.cloneNode(true);
+            // Replace textareas: read live .value, substitute a <p> in the clone
+            const liveTAs   = Array.from(src.querySelectorAll("textarea"));
+            const cloneTAs  = Array.from(srcClone.querySelectorAll("textarea"));
+            liveTAs.forEach((liveTA, idx) => {
+              const p = document.createElement("p");
+              p.style.cssText = "font-size:13px;color:#222;line-height:1.8;margin:0 0 0.75rem;white-space:pre-wrap;";
+              p.textContent = liveTA.value.trim() || "—";
+              cloneTAs[idx].replaceWith(p);
+            });
+            // Replace selects: read live selected text, substitute a <span>
+            const liveSels  = Array.from(src.querySelectorAll("select"));
+            const cloneSels = Array.from(srcClone.querySelectorAll("select"));
+            liveSels.forEach((liveSel, idx) => {
+              const span = document.createElement("span");
+              span.style.cssText = "font-size:14px;font-weight:700;color:#e8251a;";
+              span.textContent = liveSel.options[liveSel.selectedIndex]?.text || liveSel.value || "—";
+              cloneSels[idx].replaceWith(span);
+            });
             const inj = document.createElement("div");
             inj.id = "rp-print-inject";
-            inj.innerHTML = src.innerHTML;
+            while (srcClone.firstChild) inj.appendChild(srcClone.firstChild);
             document.body.appendChild(inj);
             document.body.classList.add("rp-printing");
             window.print();
@@ -3113,7 +3133,8 @@ ${compsHtml}
                           <span style={{ fontWeight:700, fontSize:14 }}>{comp.name}</span>
                           <span style={{ fontWeight:700, fontSize:14, color: scoreColor(sc2) }}>{fmtRp(sc2)} / 5 &nbsp;<span style={{ fontSize:11, fontWeight:400 }}>{scoreLblRp(sc2)}</span></span>
                         </div>
-                        <p style={{ fontSize:12, color:"#333", marginBottom:6, lineHeight:1.7 }}><strong>Evidence: </strong>{comp.evidence}</p>
+                        {comp.measures && <p style={{ fontSize:12, color:"#666", marginBottom:6, lineHeight:1.7, fontStyle:"italic" }}>{comp.measures}</p>}
+                        <p style={{ fontSize:12, color:"#333", marginBottom:6, lineHeight:1.7 }}><strong>What the candidate demonstrated: </strong>{comp.demonstrated || comp.evidence}</p>
                         <p style={{ fontSize:12, color:"#333", marginBottom:4, lineHeight:1.7 }}><strong style={{ color:"#16a34a" }}>Strength: </strong>{comp.strength}</p>
                         <p style={{ fontSize:12, color:"#333", lineHeight:1.7 }}><strong style={{ color:"#9a3412" }}>Development opportunity: </strong>{comp.developmentOpportunity}</p>
                       </div>
@@ -3124,19 +3145,16 @@ ${compsHtml}
                   {rptPara(content.areasForDevelopment)}
                   <div className="rp-page-break" />
                   {rptH("6. Individual Development Plan — 70-20-10 Framework")}
-                  {(content.competencies||[]).map((comp,i) => (
-                    <div key={i} className="rp-avoid-break" style={{ marginBottom:"1.25rem" }}>
-                      <div style={{ fontWeight:700, fontSize:13, color:RPT_RED, marginBottom:8 }}>{comp.name}</div>
-                      {[["70% — On the Job", comp.on70],["20% — Learning from Others", comp.social20],["10% — Formal Learning", comp.formal10]].map(([label, items]) => (
-                        <div key={label} style={{ marginBottom:8 }}>
-                          <div style={{ fontSize:12, fontWeight:700, color:RPT_GRAY, marginBottom:4 }}>{label}</div>
-                          <ul style={{ margin:0, paddingLeft:18 }}>
-                            {(items||[]).map((item,j) => <li key={j} style={{ fontSize:12, color:"#444", lineHeight:1.7, marginBottom:2 }}>{item}</li>)}
-                          </ul>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
+                  <div className="rp-avoid-break" style={{ marginBottom:"1.25rem" }}>
+                    {[["70% — On the Job", content.devPlan?.on70],["20% — Learning from Others", content.devPlan?.social20],["10% — Formal Learning", content.devPlan?.formal10]].map(([label, items]) => (
+                      <div key={label} style={{ marginBottom:10 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:RPT_GRAY, marginBottom:4 }}>{label}</div>
+                        <ul style={{ margin:0, paddingLeft:18 }}>
+                          {(items||[]).map((item,j) => <li key={j} style={{ fontSize:12, color:"#444", lineHeight:1.7, marginBottom:2 }}>{item}</li>)}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
                   {rptH("7. Result of Assessment")}
                   <div className="rp-avoid-break" style={{ background:"#f8f9fb", border:`2px solid ${RPT_RED}`, borderRadius:8, padding:"16px 20px", marginBottom:"1rem" }}>
                     <div style={{ fontSize:16, fontWeight:700, color:RPT_RED, marginBottom:8 }}>{content.recommendation}</div>
@@ -3292,10 +3310,11 @@ ${compsHtml}
                   </div>
                   {rptH("6. Overall Strengths and Development Themes")}
                   {rptPara(content.overallStrengths)}{rptPara(content.developmentThemes)}
-                  {rptH("7. Summary of Development Recommendations")}
+                  {rptH(`7. Top Development Priorities — ${sr.cohort?.name || "Cohort"}`)}
                   {(content.devPriorities||[]).map((dp,i)=>(
                     <div key={i} className="rp-avoid-break" style={{ marginBottom:"1rem", padding:"14px 16px", background:"#fafafa", borderRadius:8, border:"1px solid #eee" }}>
-                      <div style={{ fontWeight:700, fontSize:13, color:RPT_RED, marginBottom:8 }}>{dp.competency}</div>
+                      <div style={{ fontWeight:700, fontSize:13, color:RPT_RED, marginBottom:4 }}>Priority {i+1}: {dp.priority || dp.competency}</div>
+                      {dp.rationale && <p style={{ fontSize:12, color:"#555", fontStyle:"italic", margin:"0 0 8px", lineHeight:1.6 }}>{dp.rationale}</p>}
                       {[["70% — On the Job", dp.on70],["20% — Learning from Others", dp.social20],["10% — Formal Learning", dp.formal10]].map(([lbl,txt])=>(
                         <p key={lbl} style={{ fontSize:12, color:"#333", margin:"0 0 4px" }}><strong>{lbl}: </strong>{txt}</p>
                       ))}
@@ -3344,8 +3363,9 @@ ${compsHtml}
           function makeEmptyContent(type) {
             if (type === "individual") return {
               executiveSummary:"", assessmentMethodology:"", howToUse:"",
-              competencies: compList.map(c => ({ name:c.name, evidence:"", strength:"", developmentOpportunity:"", on70:[""], social20:[""], formal10:[""] })),
+              competencies: compList.map(c => ({ name:c.name, measures:"", demonstrated:"", strength:"", developmentOpportunity:"" })),
               overallStrengths:"", areasForDevelopment:"",
+              devPlan: { on70:[""], social20:[""], formal10:[""] },
               recommendation:"Recommended", recommendationNarrative:"",
             };
             if (type === "client") return {
@@ -3359,7 +3379,7 @@ ${compsHtml}
               executiveSummary:"", assessorDeclaration:"",
               competencyInsights: compList.map(c => ({ name:c.name, cohortObs:"" })),
               overallStrengths:"", developmentThemes:"",
-              devPriorities: compList.slice(0,2).map(c => ({ competency:c.name, on70:"", social20:"", formal10:"" })),
+              devPriorities: [{priority:"",rationale:"",on70:"",social20:"",formal10:""},{priority:"",rationale:"",on70:"",social20:"",formal10:""},{priority:"",rationale:"",on70:"",social20:"",formal10:""}],
               participantSummaries: [],
               _cohortData:[], _compList:compList.map(c=>c.name), _scoreLbl: v=>v===null?"–":Number(v).toFixed(1),
             };
@@ -3394,8 +3414,9 @@ ${compsHtml}
             const ec = rpEditContent || {};
             const upd = (f,v) => setRpEditContent(p=>({...p,[f]:v}));
             const updComp = (i,f,v) => setRpEditContent(p=>{ const cs=[...(p.competencies||[])]; cs[i]={...cs[i],[f]:v}; return {...p,competencies:cs}; });
-            const updCompArr = (i,f,v) => setRpEditContent(p=>{ const cs=[...(p.competencies||[])]; cs[i]={...cs[i],[f]:v.split("\n").map(s=>s.trim()).filter(Boolean)}; return {...p,competencies:cs}; });
+            const updPlanArr = (f,v) => setRpEditContent(p=>({ ...p, devPlan:{ ...(p.devPlan||{}), [f]:v.split("\n").map(s=>s.trim()).filter(Boolean) } }));
             const sr = rpReport?.selResult;
+            const dp = ec.devPlan || {};
             return (
               <div style={{ padding:"0 0 40px" }}>
                 {rptCoverHeader("Individual Assessment Report", sr?.participant, sr?.level, sr?.cohort, sr?.module, sr?.completed_at)}
@@ -3407,17 +3428,19 @@ ${compsHtml}
                   {(ec.competencies||[]).map((comp,i) => (
                     <div key={i} style={{ marginBottom:"1.5rem", padding:"16px", background:"#fafafa", borderRadius:8, border:"1px solid #ddd" }}>
                       <div style={{ fontWeight:700, fontSize:14, marginBottom:10 }}>{comp.name}</div>
-                      {LBL("Evidence")}{ta(comp.evidence, v=>updComp(i,"evidence",v), 3)}
+                      {LBL("What this competency measures (1 sentence)")}{ta(comp.measures, v=>updComp(i,"measures",v), 1)}
+                      {LBL("What the candidate demonstrated (2 sentences)")}{ta(comp.demonstrated||comp.evidence, v=>updComp(i,"demonstrated",v), 3)}
                       {LBL("Strength","#16a34a")}{ta(comp.strength, v=>updComp(i,"strength",v), 2)}
                       {LBL("Development Opportunity","#9a3412")}{ta(comp.developmentOpportunity, v=>updComp(i,"developmentOpportunity",v), 2)}
-                      {LBL("70% — On the Job (one action per line)")}{ta((comp.on70||[]).join("\n"), v=>updCompArr(i,"on70",v), 2)}
-                      {LBL("20% — Learning from Others (one per line)")}{ta((comp.social20||[]).join("\n"), v=>updCompArr(i,"social20",v), 2)}
-                      {LBL("10% — Formal Learning (one per line)")}{ta((comp.formal10||[]).join("\n"), v=>updCompArr(i,"formal10",v), 2)}
                     </div>
                   ))}
                   {rptH("5. Overall Strengths and Areas for Development")}
                   {LBL("Overall Strengths")}{ta(ec.overallStrengths, v=>upd("overallStrengths",v), 3)}
                   {LBL("Areas for Development")}{ta(ec.areasForDevelopment, v=>upd("areasForDevelopment",v), 3)}
+                  {rptH("6. Individual Development Plan — 70-20-10 Framework")}
+                  {LBL("70% — On the Job (one action per line)")}{ta((dp.on70||[]).join("\n"), v=>updPlanArr("on70",v), 4)}
+                  {LBL("20% — Learning from Others (one per line)")}{ta((dp.social20||[]).join("\n"), v=>updPlanArr("social20",v), 3)}
+                  {LBL("10% — Formal Learning (one per line)")}{ta((dp.formal10||[]).join("\n"), v=>updPlanArr("formal10",v), 3)}
                   {rptH("7. Result of Assessment")}
                   {LBL("Recommendation")}
                   <select value={ec.recommendation||"Recommended"} onChange={e=>upd("recommendation",e.target.value)}
@@ -3508,10 +3531,12 @@ ${compsHtml}
                   {rptH("6. Overall Strengths and Development Themes")}
                   {LBL("Overall Strengths")}{ta(ec.overallStrengths, v=>upd("overallStrengths",v), 3)}
                   {LBL("Development Themes")}{ta(ec.developmentThemes, v=>upd("developmentThemes",v), 3)}
-                  {rptH("7. Summary of Development Recommendations")}
+                  {rptH("7. Top Development Priorities")}
                   {(ec.devPriorities||[]).map((dp,i) => (
                     <div key={i} style={{ marginBottom:"1rem", padding:"14px", background:"#fafafa", borderRadius:8, border:"1px solid #ddd" }}>
-                      <div style={{ fontWeight:700, fontSize:13, color:RPT_RED, marginBottom:8 }}>{dp.competency}</div>
+                      <div style={{ fontWeight:700, fontSize:13, color:RPT_RED, marginBottom:8 }}>Priority {i+1}</div>
+                      {LBL("Priority Theme")}{ta(dp.priority||dp.competency||"", v=>updDP(i,"priority",v), 1)}
+                      {LBL("Rationale (1 sentence)")}{ta(dp.rationale||"", v=>updDP(i,"rationale",v), 1)}
                       {LBL("70% — On the Job")}{ta(dp.on70, v=>updDP(i,"on70",v), 1)}
                       {LBL("20% — Learning from Others")}{ta(dp.social20, v=>updDP(i,"social20",v), 1)}
                       {LBL("10% — Formal Learning")}{ta(dp.formal10, v=>updDP(i,"formal10",v), 1)}
