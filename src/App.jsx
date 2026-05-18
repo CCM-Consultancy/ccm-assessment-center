@@ -478,7 +478,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
     setMbSelModId(moduleId);
     setMbScenEditing(false);
     const mod = mbModules.find(m => m.id === moduleId);
-    setMbModForm({ name: mod?.title || "", module_type: mod?.module_type || "questions", task_brief: mod?.task_brief || "" });
+    setMbModForm({ name: mod?.title || "", module_type: mod?.module_type || "questions", task_brief: mod?.task_brief || "", ac_intro_text: mod?.ac_intro_text || "" });
     setMbTimeForm({
       reading_time_mins: mod?.reading_time_mins ?? 5,
       sup_q_mins:        mod?.sup_q_mins        ?? 45,
@@ -521,7 +521,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
       setMbNewName("");
       // Select the new module
       setMbSelModId(mod.id);
-      setMbModForm({ name: mod.title || "", module_type: "questions", task_brief: "" });
+      setMbModForm({ name: mod.title || "", module_type: "questions", task_brief: "", ac_intro_text: "" });
       setMbLevelIds([]);
       setMbScenForm({ ...emptyScenForm });
       notify("Module added.");
@@ -543,6 +543,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
         display_order: mod?.display_order ?? 0,
         module_type:   mbModForm.module_type || "questions",
         task_brief:    mbModForm.task_brief  || "",
+        ac_intro_text: mbModForm.ac_intro_text || "",
       });
       // 2. Save level access
       await db.saveModuleLevels(mbSelModId, mbLevelIds);
@@ -1615,6 +1616,20 @@ ${compsHtml}
                         {mbTimeSaving ? "Saving…" : "Save Time Settings"}
                       </button>
                     </div>
+                  </div>
+
+                  {/* Assessment Introduction Text */}
+                  <div style={{ ...S.card, marginBottom:"1.5rem" }}>
+                    <h3 style={{ margin:"0 0 4px", fontSize:15 }}>Assessment Introduction</h3>
+                    <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:12 }}>
+                      Shown to participants on the welcome screen before the assessment begins. Leave blank to use the default CCM text.
+                    </p>
+                    <textarea
+                      style={{ ...S.textarea, height:160 }}
+                      value={mbModForm.ac_intro_text || ""}
+                      onChange={e => setMbModForm(f => ({ ...f, ac_intro_text: e.target.value }))}
+                      placeholder="This Assessment Center has been designed to evaluate key leadership competencies relevant to your role…"
+                    />
                   </div>
 
                   <button onClick={saveMbModule} disabled={mbSaving} style={S.btn(CCM_RED,"#fff",{ opacity:mbSaving?0.6:1 })}>

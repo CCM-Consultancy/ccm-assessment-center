@@ -176,6 +176,206 @@ function LoginScreen({ form, setForm, error, loading, onSubmit }) {
 
 const READING_SECONDS = 300; // 5 minutes
 
+const AC_INTRO_DEFAULT = "This Assessment Center has been designed to evaluate key leadership competencies relevant to your role. You will complete two parts: a Behavioral Interview and a Case Study exercise. Your responses will be reviewed by a qualified assessor from CCM Consultancy. Please approach each section honestly and draw on real examples from your professional experience.";
+
+// ─── System Check Screen ───────────────────────────────────────────────────────
+function SystemCheckScreen({ onContinue }) {
+  const ua = navigator.userAgent;
+  const isChrome      = /Chrome/.test(ua) && !/Edg\//.test(ua) && !/OPR\//.test(ua);
+  const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || window.innerWidth <= 1024;
+  const isOnline      = navigator.onLine;
+  const isResOk       = window.screen.width >= 1280;
+
+  const canProceed = !isMobileDevice && isOnline;
+
+  const checks = [
+    {
+      status: isChrome ? "ok" : "warn",
+      label:  isChrome
+        ? "You are using Google Chrome — recommended"
+        : "You are not using Google Chrome. Please switch to Google Chrome before continuing. Other browsers may not support all assessment features.",
+    },
+    {
+      status: !isMobileDevice ? "ok" : "fail",
+      label:  !isMobileDevice
+        ? "You are using a desktop or laptop — required"
+        : "Mobile and tablet devices are not permitted. Please use a desktop or laptop computer.",
+    },
+    {
+      status: isOnline ? "ok" : "fail",
+      label:  isOnline
+        ? "Your internet connection is active"
+        : "No internet connection detected. Please check your connection before continuing.",
+    },
+    {
+      status: isResOk ? "ok" : "warn",
+      label:  isResOk
+        ? "Screen resolution is sufficient"
+        : "Your screen resolution may be too small. For best results use a screen with at least 1280px width.",
+    },
+  ];
+
+  const iconFor = (status) =>
+    status === "ok"   ? { icon: "✅", color: "#16a34a", bg: "#f0fdf4", border: "#86efac" } :
+    status === "warn" ? { icon: "⚠️", color: "#92400e", bg: "#fffbeb", border: "#fde68a" } :
+                        { icon: "❌", color: "#dc2626", bg: "#fef2f2", border: "#fca5a5" };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#f7f8fa", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: SANS, padding: "2rem 1rem", overflow: "auto" }}>
+      <style>{`${FONTS} body { overflow: auto !important; }`}</style>
+      <div style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 16, padding: "2.5rem", width: "100%", maxWidth: 580, boxShadow: "0 4px 24px rgba(0,0,0,.06)" }}>
+        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+          <CCMLogo scale={1.1} />
+          <h2 style={{ fontFamily: SERIF, fontSize: 24, margin: "1.25rem 0 0.4rem", color: "#111" }}>
+            Before You Begin — System Check
+          </h2>
+          <p style={{ fontSize: 14, color: "#666", margin: 0 }}>
+            Please confirm your setup meets the required standards.
+          </p>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: "1.75rem" }}>
+          {checks.map((c, i) => {
+            const { icon, color, bg, border } = iconFor(c.status);
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "14px 16px", background: bg, borderRadius: 10, border: `1px solid ${border}` }}>
+                <span style={{ fontSize: 20, flexShrink: 0, lineHeight: 1.4 }}>{icon}</span>
+                <span style={{ fontSize: 13, color, lineHeight: 1.6, fontWeight: c.status !== "ok" ? 600 : 400 }}>{c.label}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {!canProceed && (
+          <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#dc2626", fontWeight: 600, marginBottom: "1.25rem", textAlign: "center" }}>
+            You cannot proceed until the required checks pass.
+          </div>
+        )}
+
+        <button
+          onClick={onContinue}
+          disabled={!canProceed}
+          style={btn(canProceed ? CCM_RED : "#ccc", "#fff", { width: "100%", cursor: canProceed ? "pointer" : "not-allowed", fontSize: 15, padding: "13px 22px" })}
+        >
+          Continue →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Welcome / AC Introduction Screen ─────────────────────────────────────────
+function WelcomeScreen({ session, participant, onContinue }) {
+  const [agreed, setAgreed] = useState(false);
+
+  const firstModule = session?.modules?.[0];
+  const cohort      = session?.cohort;
+  const level       = session?.level;
+  const levelName   = (level?.name || "").toLowerCase();
+  const isDirector  = levelName.includes("director");
+  const isManager   = levelName.includes("manager");
+
+  const qMins    = isDirector ? (firstModule?.dir_q_mins ?? 75)   : isManager ? (firstModule?.mgr_q_mins ?? 60)   : (firstModule?.sup_q_mins ?? 45);
+  const taskMins = isDirector ? (firstModule?.dir_task_mins ?? 60) : isManager ? (firstModule?.mgr_task_mins ?? 45) : (firstModule?.sup_task_mins ?? 30);
+  const breakMins = firstModule?.break_duration_mins ?? 10;
+  const numQuestions = (firstModule?.questions || []).length;
+  const introText = firstModule?.ac_intro_text || AC_INTRO_DEFAULT;
+
+  const guidelines = [
+    "Use Google Chrome on a laptop or desktop only",
+    "Do not use a mobile phone or tablet",
+    "Tab switching is monitored and logged in both parts",
+    "Copy and paste is disabled in answer fields",
+    "Audio recording requires microphone permission if selected",
+  ];
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#f7f8fa", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: SANS, padding: "2rem 1rem", overflow: "auto" }}>
+      <style>{`${FONTS} body { overflow: auto !important; }`}</style>
+      <div style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 16, padding: "2.5rem", width: "100%", maxWidth: 640, boxShadow: "0 4px 24px rgba(0,0,0,.06)" }}>
+        {/* Logo row */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.75rem" }}>
+          <CCMLogo scale={1.1} />
+        </div>
+
+        {/* Title */}
+        <h2 style={{ fontFamily: SERIF, fontSize: 26, margin: "0 0 0.35rem", color: "#111", lineHeight: 1.25 }}>
+          Welcome to the CCM Assessment Center
+        </h2>
+        <p style={{ fontSize: 14, color: "#888", margin: "0 0 1.75rem" }}>
+          {firstModule?.title || "Assessment Module"}
+          {cohort?.name ? ` — ${cohort.name}` : ""}
+        </p>
+
+        {/* Section 1 — About */}
+        <div style={{ marginBottom: "1.5rem" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: CCM_RED, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>
+            About This Assessment
+          </div>
+          <p style={{ fontSize: 14, color: "#333", lineHeight: 1.8, margin: 0 }}>{introText}</p>
+        </div>
+
+        {/* Section 2 — What to Expect */}
+        <div style={{ marginBottom: "1.5rem" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: CCM_RED, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>
+            What to Expect
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {[
+              { label: "Part 1 — Behavioral Interview", time: qMins, detail: `You will be asked ${numQuestions > 0 ? numQuestions : "a series of"} question${numQuestions !== 1 ? "s" : ""} about your professional experience. Answer by typing your response.` },
+              { label: "Break", time: breakMins, detail: "A short break between the two parts." },
+              { label: "Part 2 — Case Study", time: taskMins, detail: "You will read a business case and complete a series of tasks." },
+            ].map((row, i) => (
+              <div key={i} style={{ display: "flex", gap: 14, padding: "12px 16px", background: "#f8f9fb", borderRadius: 10, border: "1px solid #eee" }}>
+                <div style={{ minWidth: 52, flexShrink: 0, fontFamily: "monospace", fontSize: 15, fontWeight: 700, color: CCM_RED, paddingTop: 1 }}>
+                  {row.time}m
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: "#111", marginBottom: 2 }}>{row.label}</div>
+                  <div style={{ fontSize: 12, color: "#666", lineHeight: 1.55 }}>{row.detail}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Section 3 — Guidelines */}
+        <div style={{ marginBottom: "1.75rem" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: CCM_RED, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>
+            Guidelines
+          </div>
+          <ul style={{ margin: 0, padding: "0 0 0 1.1rem", display: "flex", flexDirection: "column", gap: 6 }}>
+            {guidelines.map((g, i) => (
+              <li key={i} style={{ fontSize: 13, color: "#444", lineHeight: 1.6 }}>{g}</li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Checkbox */}
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer", marginBottom: "1.5rem", padding: "14px 16px", background: agreed ? "#fff7f7" : "#f8f9fb", borderRadius: 10, border: `1px solid ${agreed ? CCM_RED + "44" : "#eee"}`, transition: "all 0.2s" }}>
+          <input
+            type="checkbox"
+            checked={agreed}
+            onChange={e => setAgreed(e.target.checked)}
+            style={{ width: 18, height: 18, marginTop: 1, accentColor: CCM_RED, flexShrink: 0 }}
+          />
+          <span style={{ fontSize: 14, color: "#333", lineHeight: 1.6 }}>
+            I have read and understood the above information.
+          </span>
+        </label>
+
+        <button
+          onClick={onContinue}
+          disabled={!agreed}
+          style={btn(agreed ? CCM_RED : "#ccc", "#fff", { width: "100%", cursor: agreed ? "pointer" : "not-allowed", fontSize: 15, padding: "13px 22px" })}
+        >
+          Proceed to Assessment Rules →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Anti-Cheat Setup Screen ───────────────────────────────────────────────────
 function AntiCheatScreen({ session, agreeChecked, setAgreeChecked, onBegin }) {
   const assessmentName = session?.caseStudy?.name || "Assessment";
@@ -822,7 +1022,7 @@ export default function ParticipantApp() {
         const sess = await db.loadParticipantSession(p);
         setParticipant(p);
         setSession(sess);
-        setScreen("antiCheat");
+        setScreen("systemCheck");
       } catch {
         localStorage.removeItem(LS_USER);
         localStorage.removeItem(LS_PASS);
@@ -1089,10 +1289,12 @@ export default function ParticipantApp() {
       </div>
     );
   }
-  if (screen === "landing")   return <LandingScreen isMobile={isMobile} onBegin={() => setScreen("login")} />;
-  if (screen === "login")     return <LoginScreen form={loginForm} setForm={setLoginForm} error={loginError} loading={loginLoading} onSubmit={handleLogin} />;
-  if (screen === "antiCheat") return <AntiCheatScreen session={session} agreeChecked={agreeChecked} setAgreeChecked={setAgreeChecked} onBegin={beginAssessment} />;
-  if (screen === "done")      return <DoneScreen completionTimeSec={completionTimeSec} />;
+  if (screen === "landing")     return <LandingScreen isMobile={isMobile} onBegin={() => setScreen("login")} />;
+  if (screen === "login")       return <LoginScreen form={loginForm} setForm={setLoginForm} error={loginError} loading={loginLoading} onSubmit={handleLogin} />;
+  if (screen === "systemCheck") return <SystemCheckScreen onContinue={() => setScreen("welcome")} />;
+  if (screen === "welcome")     return <WelcomeScreen session={session} participant={participant} onContinue={() => setScreen("antiCheat")} />;
+  if (screen === "antiCheat")   return <AntiCheatScreen session={session} agreeChecked={agreeChecked} setAgreeChecked={setAgreeChecked} onBegin={beginAssessment} />;
+  if (screen === "done")        return <DoneScreen completionTimeSec={completionTimeSec} />;
 
   // ── Part 2 transition ─────────────────────────────────────────────────────────
   if (assessPhase === "part2Transition") {
