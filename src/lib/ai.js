@@ -150,7 +150,7 @@ ${compScores.map(c => `[${c.name}] Score: ${c.overall ? c.overall.toFixed(1) : "
 Return ONLY valid JSON:
 {"executiveSummary":"3-4 sentences","assessmentMethodology":"2 sentences on AC methodology","howToUse":"2 sentences on how to use this report","competencies":[{"name":"exact name","evidence":"2-3 sentences of specific evidence","strength":"1-2 sentences on strength","developmentOpportunity":"1-2 sentences on dev area","on70":["2 specific on-the-job actions"],"social20":["2 social/mentoring actions"],"formal10":["1-2 formal learning actions"]}],"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","recommendation":"one category only","recommendationNarrative":"2-3 sentences using AC language"}`;
 
-  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 3000 });
+  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 2000 });
   if (!text) throw new Error("No AI response");
   return JSON.parse(text.replace(/```json|```/g, "").trim());
 }
@@ -172,7 +172,7 @@ ${compScores.map(c => `[${c.name}] ${c.overall ? c.overall.toFixed(1) : "N/A"} (
 Return ONLY valid JSON:
 {"executiveSummary":"3-4 sentences","assessorDeclaration":"I confirm this assessment was conducted in line with CCM Consultancy assessment centre standards. [Assessor: ${assessorName || "CCM Consultancy"}]","competencies":[{"name":"exact name","evidence":"one concise sentence of evidence","developmentPriority":"one line development priority"}],"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","devSummary":[{"competency":"name","action":"one line recommended action"}],"recommendation":"one category only","recommendationNarrative":"2-3 formal sentences"}`;
 
-  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 3000 });
+  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 2000 });
   if (!text) throw new Error("No AI response");
   return JSON.parse(text.replace(/```json|```/g, "").trim());
 }
@@ -184,9 +184,7 @@ export async function generateCohortReport({ cohortName, moduleName, cohortData,
     return { name: comp.name, avg: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null, count: vals.length };
   });
 
-  const prompt = `You are an expert Assessment Centre report writer for CCM Consultancy. ${AC_RULES}
-
-Write a COHORT REPORT for a group of participants.
+  const context = `You are an expert Assessment Centre report writer for CCM Consultancy. ${AC_RULES}
 
 Cohort: ${cohortName} | Module: ${moduleName} | Assessor: ${assessorName || "CCM Consultancy"} | Participants: ${cohortData.length}
 
@@ -194,14 +192,31 @@ COHORT COMPETENCY AVERAGES:
 ${avgByComp.map(c => `${c.name}: ${c.avg ? c.avg.toFixed(1) : "N/A"} (${scoreLabel(c.avg)}) across ${c.count} participants`).join("\n")}
 
 INDIVIDUAL SCORES:
-${cohortData.map(p => `${p.name} (${p.level || "Unknown level"}): Overall ${p.overall ? p.overall.toFixed(1) : "N/A"} | ${p.compScores.map(c => `${c.name}: ${c.overall ? c.overall.toFixed(1) : "N/A"}`).join(", ")}`).join("\n")}
+${cohortData.map(p => `${p.name} (${p.level || "Unknown level"}): Overall ${p.overall ? p.overall.toFixed(1) : "N/A"} | ${p.compScores.map(c => `${c.name}: ${c.overall ? c.overall.toFixed(1) : "N/A"}`).join(", ")}`).join("\n")}`;
+
+  // Call 1 — narrative sections (no participant summaries to stay within timeout)
+  const prompt1 = `${context}
+
+Return ONLY valid JSON for the narrative sections:
+{"executiveSummary":"3-4 sentences on overall cohort performance","assessorDeclaration":"I confirm all assessments were conducted in line with CCM Consultancy standards. [Assessor: ${assessorName || "CCM Consultancy"}]","competencyInsights":[{"name":"exact name","cohortObs":"2-3 sentences on cohort pattern for this competency"}],"overallStrengths":"2-3 sentences on cohort-wide strengths","developmentThemes":"2-3 sentences on cohort-wide development themes","devPriorities":[{"competency":"top priority competency name","on70":"one specific on-the-job priority","social20":"one social/mentoring priority","formal10":"one formal learning priority"},{"competency":"second priority competency name","on70":"one specific on-the-job priority","social20":"one social/mentoring priority","formal10":"one formal learning priority"}]}`;
+
+  const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 2000 });
+  if (!text1) throw new Error("No AI response (call 1)");
+  const part1 = JSON.parse(text1.replace(/```json|```/g, "").trim());
+
+  // Call 2 — individual participant summaries
+  const prompt2 = `${context}
+
+Write a one-paragraph summary and recommendation for EACH participant listed above.
 
 Return ONLY valid JSON:
-{"executiveSummary":"3-4 sentences on overall cohort performance","assessorDeclaration":"I confirm all assessments were conducted in line with CCM Consultancy standards. [Assessor: ${assessorName || "CCM Consultancy"}]","competencyInsights":[{"name":"exact name","cohortObs":"2-3 sentences on cohort pattern for this competency"}],"overallStrengths":"2-3 sentences on cohort-wide strengths","developmentThemes":"2-3 sentences on cohort-wide development themes","devPriorities":[{"competency":"name","on70":"one specific on-the-job priority","social20":"one social/mentoring priority","formal10":"one formal learning priority"},{"competency":"name","on70":"...","social20":"...","formal10":"..."}],"participantSummaries":[{"name":"participant name","recommendation":"one category","summary":"one paragraph using AC language"}]}`;
+{"participantSummaries":[{"name":"exact participant name","recommendation":"one category only","summary":"one paragraph using AC language — The candidate demonstrated..."}]}`;
 
-  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 3000 });
-  if (!text) throw new Error("No AI response");
-  return JSON.parse(text.replace(/```json|```/g, "").trim());
+  const text2 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt2 }], maxTokens: 1500 });
+  if (!text2) throw new Error("No AI response (call 2)");
+  const part2 = JSON.parse(text2.replace(/```json|```/g, "").trim());
+
+  return { ...part1, participantSummaries: part2.participantSummaries || [] };
 }
 
 // ─── PDF helpers ───────────────────────────────────────────────────────────────
