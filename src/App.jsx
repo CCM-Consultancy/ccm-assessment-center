@@ -127,13 +127,14 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const [dbLoading,  setDbLoading]  = useState(false);
 
   // ─── Reports ──────────────────────────────────────────────────────────────────
-  const [rpResults,   setRpResults]   = useState([]);
-  const [rpModules,   setRpModules]   = useState([]);
-  const [rpLoading,   setRpLoading]   = useState(false);
-  const [rpSelKey,    setRpSelKey]    = useState(null);
-  const [rpQuestions, setRpQuestions] = useState([]);
-  const [rpScores,    setRpScores]    = useState({ part1:{}, part2:{} });
-  const [rpSaving,    setRpSaving]    = useState(false);
+  const [rpResults,       setRpResults]       = useState([]);
+  const [rpModules,       setRpModules]       = useState([]);
+  const [rpLoading,       setRpLoading]       = useState(false);
+  const [rpSelKey,        setRpSelKey]        = useState(null);
+  const [rpQuestions,     setRpQuestions]     = useState([]);
+  const [rpCompetencies,  setRpCompetencies]  = useState([]);
+  const [rpScores,        setRpScores]        = useState({ part1:{}, part2:{} });
+  const [rpSaving,        setRpSaving]        = useState(false);
 
   // ─── Self-registration ────────────────────────────────────────────────────────
   const [loginMode,  setLoginMode]  = useState("signin"); // "signin" | "register"
@@ -1213,8 +1214,9 @@ ${compsHtml}
   async function selectRpResult(result) {
     setRpSelKey(result.participant_id + "|" + result.module_id);
     try {
-      const qs = await db.getQuestionsForModule(result.module_id);
-      setRpQuestions(qs);
+      const { questions, competencies } = await db.getQuestionsForModule(result.module_id);
+      setRpQuestions(questions);
+      setRpCompetencies(competencies);
       const ex = result.scores || {};
       setRpScores({ part1: ex.part1 || {}, part2: ex.part2 || {} });
     } catch(e) { notify("Failed to load questions: " + e.message); }
@@ -2867,17 +2869,26 @@ ${compsHtml}
 
           const selResult = rpSelKey ? resultRows.find(r => r.participant_id + "|" + r.module_id === rpSelKey) : null;
 
-          const compGroups = {};
+          // Index questions by competency_id for O(1) lookup
+          const qsByComp = {};
           rpQuestions.forEach(q => {
-            const cId   = q.competency_id || "none";
-            const cName = q.competency?.name || "Unknown Competency";
-            if (!compGroups[cId]) compGroups[cId] = { id: cId, name: cName, questions: [] };
-            compGroups[cId].questions.push(q);
+            const cId = q.competency_id || "none";
+            if (!qsByComp[cId]) qsByComp[cId] = [];
+            qsByComp[cId].push(q);
           });
-          const compList = Object.values(compGroups);
+          // Use fetched competencies as the authoritative list; fall back to
+          // question-derived list if competencies haven't loaded yet.
+          const baseComps = rpCompetencies.length > 0
+            ? rpCompetencies
+            : Object.values(rpQuestions.reduce((acc, q) => {
+                const cId = q.competency_id || "none";
+                if (!acc[cId]) acc[cId] = { id: cId, name: q.competency?.name || "Unknown Competency" };
+                return acc;
+              }, {}));
+          const compList = baseComps.map(c => ({ ...c, questions: qsByComp[c.id] || [] }));
 
           function p1Avg(cId) {
-            const qs = (compGroups[cId] || {}).questions || [];
+            const qs = (compList.find(c => c.id === cId) || {}).questions || [];
             const scores = qs.map(q => rpScores.part1[q.id]).filter(s => s && !s.not_attempted && s.score);
             if (!scores.length) return null;
             return scores.reduce((a, s) => a + s.score, 0) / scores.length;
@@ -3012,10 +3023,6 @@ ${compsHtml}
                             Module: <strong style={{ color:"#555" }}>{selResult.module?.title || selResult.module_id}</strong>
                           </div>
                         </div>
-                        <button onClick={saveRpScores} disabled={rpSaving}
-                          style={S.btn(CCM_RED,"#fff",{ opacity:rpSaving?0.6:1 })}>
-                          {rpSaving ? "Saving…" : "Save Scores"}
-                        </button>
                       </div>
 
                       {/* Part 1 — behavioural questions */}

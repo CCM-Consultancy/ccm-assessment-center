@@ -541,8 +541,15 @@ export async function getModules() {
 }
 
 export async function getQuestionsForModule(moduleId) {
-  return arr(await q("cs_questions", "GET", null,
-    `?module_id=eq.${moduleId}&select=*,competency:cs_competencies(id,name)&order=display_order.asc`));
+  const [questions, comps] = await Promise.all([
+    arr(await q("cs_questions",   "GET", null, `?module_id=eq.${moduleId}&select=*&order=display_order.asc`)),
+    arr(await q("cs_competencies","GET", null, "?select=*")),
+  ]);
+  const compMap = Object.fromEntries(comps.map(c => [c.id, c]));
+  return {
+    questions:    questions.map(qs => ({ ...qs, competency: compMap[qs.competency_id] || null })),
+    competencies: comps,
+  };
 }
 
 export async function saveScores(participantId, moduleId, scores) {
