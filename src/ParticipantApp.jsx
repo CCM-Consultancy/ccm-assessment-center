@@ -465,6 +465,118 @@ function DoneScreen({ completionTimeSec }) {
   );
 }
 
+// ─── Break Screen ─────────────────────────────────────────────────────────────
+function BreakScreen({ breakDurationSecs, participant, tabSwitches, showTabWarning, setShowTabWarning, onResume, onSignOut }) {
+  const MIN_RESUME_SECS = 120; // 2-minute minimum lock
+  const [timeLeft, setTimeLeft]   = useState(breakDurationSecs);
+  const [canResume, setCanResume] = useState(false);
+  const [expired, setExpired]     = useState(false);
+  const startRef = useRef(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startRef.current) / 1000);
+      const remaining = Math.max(0, breakDurationSecs - elapsed);
+      setTimeLeft(remaining);
+      if (elapsed >= MIN_RESUME_SECS) setCanResume(true);
+      if (remaining === 0) { setExpired(true); clearInterval(interval); }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [breakDurationSecs]);
+
+  const active = canResume || expired;
+  const pct    = Math.round(((breakDurationSecs - timeLeft) / breakDurationSecs) * 100);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: SANS, background: "#f7f8fa" }}>
+      <style>{FONTS}</style>
+
+      {/* Header */}
+      <header style={{ height: HEADER_H, background: "#fff", borderBottom: "1px solid #e8e8e8", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 1.5rem", flexShrink: 0, boxShadow: "0 1px 6px rgba(0,0,0,.05)" }}>
+        <CCMLogo />
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {tabSwitches > 0 && (
+            <div style={{ fontSize: 12, color: "#dc2626", background: "#fef2f2", padding: "4px 10px", borderRadius: 20, border: "1px solid #fca5a5", fontWeight: 600 }}>
+              ⚠ {tabSwitches} tab switch{tabSwitches !== 1 ? "es" : ""}
+            </div>
+          )}
+          <span style={{ fontSize: 13, color: "#666" }}>{participant?.name || participant?.username}</span>
+          <button onClick={onSignOut} style={btn("#fff", "#555", { fontSize: 12, padding: "6px 14px" })}>Sign out</button>
+        </div>
+      </header>
+
+      {/* Card */}
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
+        <div style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 20, padding: "3rem 2.5rem", maxWidth: 520, width: "100%", boxShadow: "0 4px 32px rgba(0,0,0,.07)", textAlign: "center" }}>
+          <CCMLogo scale={1.1} />
+
+          <h2 style={{ fontFamily: SERIF, fontSize: 28, margin: "1.5rem 0 0.5rem", color: "#111" }}>Break Time</h2>
+          <p style={{ fontSize: 15, color: "#555", lineHeight: 1.7, margin: "0 0 2rem" }}>
+            You have completed Part 1. Take a short break before Part 2 begins.
+          </p>
+
+          {/* Countdown */}
+          <div style={{ fontFamily: "monospace", fontSize: 72, fontWeight: 700, letterSpacing: "0.04em", color: expired ? "#dc2626" : timeLeft < 60 ? "#f59e0b" : "#111", lineHeight: 1, marginBottom: "1.25rem" }}>
+            {formatTime(timeLeft)}
+          </div>
+
+          {/* Progress bar */}
+          <div style={{ background: "#f0f0f0", borderRadius: 8, height: 6, margin: "0 auto 1.25rem", maxWidth: 320, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${pct}%`, background: expired ? "#dc2626" : CCM_RED, borderRadius: 8, transition: "width 1s linear" }} />
+          </div>
+
+          {/* Progress steps */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 12, color: "#aaa", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "1.75rem" }}>
+            <span style={{ color: "#16a34a" }}>Part 1 Complete</span>
+            <span>·</span>
+            <span style={{ color: CCM_RED, fontWeight: 700 }}>Break</span>
+            <span>·</span>
+            <span>Part 2 Upcoming</span>
+          </div>
+
+          {/* Status message */}
+          {expired ? (
+            <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "12px 16px", fontSize: 13, color: "#dc2626", fontWeight: 600, marginBottom: "1.5rem" }}>
+              Your break time has ended. Please resume your assessment.
+            </div>
+          ) : (
+            <p style={{ fontSize: 13, color: "#888", marginBottom: "1.5rem", lineHeight: 1.6 }}>
+              {active
+                ? "Your assessment is paused. You may resume when ready."
+                : `Your assessment is paused. Please return before the timer ends.`}
+            </p>
+          )}
+
+          <button
+            onClick={onResume}
+            disabled={!active}
+            style={btn(active ? CCM_RED : "#ccc", "#fff", { width: "100%", cursor: active ? "pointer" : "not-allowed", fontSize: 16, padding: "14px 22px", borderRadius: 10 })}
+          >
+            {active ? "Resume Assessment →" : `Resume available in ${formatTime(Math.max(0, MIN_RESUME_SECS - (breakDurationSecs - timeLeft)))}…`}
+          </button>
+        </div>
+      </div>
+
+      {/* Tab warning modal */}
+      {showTabWarning && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: "2.5rem", maxWidth: 440, width: "90%", textAlign: "center", boxShadow: "0 8px 40px rgba(0,0,0,.2)" }}>
+            <div style={{ fontSize: 48, marginBottom: "0.75rem" }}>⚠️</div>
+            <h2 style={{ fontFamily: SERIF, fontSize: 22, marginBottom: "0.75rem", color: "#dc2626" }}>Tab Switch Detected</h2>
+            <p style={{ fontSize: 14, color: "#555", marginBottom: "1.5rem", lineHeight: 1.7 }}>
+              You switched away from this assessment tab during your break. This has been logged.<br />
+              <strong style={{ color: "#111" }}>Total switches recorded: {tabSwitches}</strong>
+            </p>
+            <button onClick={() => setShowTabWarning(false)} style={btn(CCM_RED, "#fff", { width: "100%", padding: "12px 22px" })}>
+              Return to Break
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Part 2 Transition Screen ─────────────────────────────────────────────────
 function Part2TransitionScreen({ participant, tabSwitches, onBeginPart2, onSignOut }) {
   return (
@@ -975,8 +1087,10 @@ export default function ParticipantApp() {
 
   // Anti-cheat
   const tabSwitchesRef   = useRef(0);
-  const part1TabSwitches = useRef(0);
-  const part2TabSwitches = useRef(0);
+  const part1TabSwitches  = useRef(0);
+  const part2TabSwitches  = useRef(0);
+  const breakTabSwitches  = useRef(0);
+  const breakStartRef     = useRef(null);
   const [tabSwitches, setTabSwitches]     = useState(0);
   const [showTabWarning, setShowTabWarning] = useState(false);
 
@@ -1066,6 +1180,7 @@ export default function ParticipantApp() {
       if (document.visibilityState === "hidden") return;
       tabSwitchesRef.current += 1;
       if (assessPhase === "part2") part2TabSwitches.current += 1;
+      else if (assessPhase === "break") breakTabSwitches.current += 1;
       else part1TabSwitches.current += 1;
       setTabSwitches(tabSwitchesRef.current);
       setShowTabWarning(true);
@@ -1158,6 +1273,8 @@ export default function ParticipantApp() {
     tabSwitchesRef.current   = 0;
     part1TabSwitches.current = 0;
     part2TabSwitches.current = 0;
+    breakTabSwitches.current = 0;
+    breakStartRef.current    = null;
     setTabSwitches(0);
     setCompletionTimeSec(0);
   }
@@ -1191,6 +1308,25 @@ export default function ParticipantApp() {
     setReadingTimeLeft(readingSecs);
     setTimerActive(true);
     setAssessPhase("part2");
+  }
+
+  function enterBreak() {
+    breakStartRef.current    = Date.now();
+    breakTabSwitches.current = 0;
+    setAssessPhase("break");
+  }
+
+  async function resumeFromBreak() {
+    const startedAt  = new Date(breakStartRef.current).toISOString();
+    const endedAt    = new Date().toISOString();
+    const durationSecs = Math.round((Date.now() - breakStartRef.current) / 1000);
+    await db.saveBreakData(participant.id, currentModule.id, {
+      started_at:              startedAt,
+      ended_at:                endedAt,
+      duration_seconds:        durationSecs,
+      tab_switches_during_break: breakTabSwitches.current,
+    });
+    setAssessPhase("part2Transition");
   }
 
   async function handlePart2Upload(file) {
@@ -1252,9 +1388,9 @@ export default function ParticipantApp() {
           []
         );
         if (assessPhase === "questions" && currentModule.module_type === "both") {
-          // Part 1 done — stop timer and show transition to Part 2
+          // Part 1 done — stop timer and enter break before Part 2
           setTimerActive(false);
-          setAssessPhase("part2Transition");
+          enterBreak();
         } else {
           advanceToNextModule();
         }
@@ -1295,6 +1431,22 @@ export default function ParticipantApp() {
   if (screen === "welcome")     return <WelcomeScreen session={session} participant={participant} onContinue={() => setScreen("antiCheat")} />;
   if (screen === "antiCheat")   return <AntiCheatScreen session={session} agreeChecked={agreeChecked} setAgreeChecked={setAgreeChecked} onBegin={beginAssessment} />;
   if (screen === "done")        return <DoneScreen completionTimeSec={completionTimeSec} />;
+
+  // ── Break screen ──────────────────────────────────────────────────────────────
+  if (assessPhase === "break") {
+    const breakMins = currentModule?.break_duration_mins ?? 10;
+    return (
+      <BreakScreen
+        breakDurationSecs={breakMins * 60}
+        participant={participant}
+        tabSwitches={tabSwitches}
+        showTabWarning={showTabWarning}
+        setShowTabWarning={setShowTabWarning}
+        onResume={resumeFromBreak}
+        onSignOut={signOut}
+      />
+    );
+  }
 
   // ── Part 2 transition ─────────────────────────────────────────────────────────
   if (assessPhase === "part2Transition") {

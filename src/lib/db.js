@@ -485,6 +485,15 @@ export async function loadParticipantAssessmentData(participantId) {
   return { results: results || [], ratings: ratings || [], requests: requests || [] };
 }
 
+export async function saveBreakData(participantId, moduleId, breakData) {
+  return first(await q("ac_results", "POST", {
+    participant_id: participantId,
+    module_id:      moduleId,
+    break_data:     breakData,
+    updated_at:     now(),
+  }, "?on_conflict=participant_id,module_id"));
+}
+
 export async function savePart2Result(participantId, moduleId, part2Answers) {
   return first(await q("ac_results", "POST", {
     participant_id: participantId,
