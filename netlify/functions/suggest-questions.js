@@ -39,14 +39,20 @@ exports.handler = async (event) => {
     };
   }
 
-  const prompt = `You are an assessment center designer. Generate exactly 5 behavioral interview questions for a management assessment center.
+  const prompt = `You are an assessment center designer. Generate exactly 5 behavioral interview questions in STAR format for a management assessment center.
 
-Case study context: "${caseStudyName}"
 Competency being assessed: "${competencyName}"
 
+STRICT RULES:
+- Each question must be fully standalone. Do NOT reference any specific case study, company, industry, sector, or scenario (including "${caseStudyName}").
+- Do NOT mention Boeing, aviation, airlines, manufacturing, finance, healthcare, or any other specific industry.
+- Every question must open with one of these STAR patterns: "Tell me about a time when...", "Describe a situation where...", "Give me an example of...", "Walk me through a time when...", or "Can you share a situation where..."
+- Questions must invite a STAR response (Situation, Task, Action, Result) — they should ask for a past experience with context, what was required, what the candidate did, and the outcome.
+- Do not include follow-up probes in the question text itself.
+
 Return ONLY a valid JSON array with no other text, markdown, or explanation. Each element must have:
-- "advanced": full, nuanced version for senior/experienced candidates
-- "standard": a simpler, more direct version that still references a specific situation or decision from the "${caseStudyName}" case study — not generic
+- "advanced": a nuanced version for senior/experienced candidates, with higher complexity or scope expectations
+- "standard": a more direct version for mid-level candidates, same STAR structure but with simpler framing
 
 [{"advanced":"...","standard":"..."},...]`;
 

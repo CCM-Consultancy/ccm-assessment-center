@@ -1844,16 +1844,16 @@ export default function ParticipantApp() {
   }
 
   function beginPart2() {
-    const taskMins      = getTaskMins(currentModule, session?.level);
+    const taskMins        = getTaskMins(currentModule, session?.level);
     const fullReadingSecs = (currentModule?.reading_time_mins || 5) * 60;
-    const skipReading   = new URLSearchParams(window.location.search).get("skipReading") === "true";
-    const isAdmin       = participant?.username === "admin";
-    const readingSecs   = (skipReading && isAdmin) ? 5 : fullReadingSecs;
-    moduleDurationRef.current  = taskMins * 60;
+    const skipTimers      = new URLSearchParams(window.location.search).get("skipReading") === "true";
+    const readingSecs     = skipTimers ? 5 : fullReadingSecs;
+    const moduleSecs      = skipTimers ? (readingSecs + 120) : (taskMins * 60); // prep = 2 min when bypassing
+    moduleDurationRef.current  = moduleSecs;
     readingDurationRef.current = readingSecs;
     part2TabSwitches.current   = 0;
     startTimeRef.current = Date.now();
-    setTimeLeft(taskMins * 60);
+    setTimeLeft(moduleSecs);
     setReadingTimeLeft(readingSecs);
     setTimerActive(true);
     setPresentationPhase("reading");
@@ -2017,10 +2017,12 @@ export default function ParticipantApp() {
 
   // ── Break screen ──────────────────────────────────────────────────────────────
   if (assessPhase === "break") {
-    const breakMins = currentModule?.break_duration_mins ?? 10;
+    const skipTimers  = new URLSearchParams(window.location.search).get("skipReading") === "true";
+    const breakMins   = currentModule?.break_duration_mins ?? 10;
+    const breakSecs   = skipTimers ? 15 : breakMins * 60;
     return (
       <BreakScreen
-        breakDurationSecs={breakMins * 60}
+        breakDurationSecs={breakSecs}
         participant={participant}
         tabSwitches={tabSwitches}
         showTabWarning={showTabWarning}
