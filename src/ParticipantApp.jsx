@@ -265,21 +265,28 @@ function SystemCheckScreen({ onContinue }) {
 }
 
 // ─── Welcome / AC Introduction Screen ─────────────────────────────────────────
-function WelcomeScreen({ session, participant, onContinue }) {
+function WelcomeScreen({ session, participant, onBegin }) {
   const [agreed, setAgreed] = useState(false);
 
-  const firstModule = session?.modules?.[0];
-  const cohort      = session?.cohort;
-  const level       = session?.level;
-  const levelName   = (level?.name || "").toLowerCase();
-  const isDirector  = levelName.includes("director");
-  const isManager   = levelName.includes("manager");
+  const firstModule  = session?.modules?.[0];
+  const cohort       = session?.cohort;
+  const level        = session?.level;
+  const levelName    = (level?.name || "").toLowerCase();
+  const isDirector   = levelName.includes("director");
+  const isManager    = levelName.includes("manager");
 
-  const qMins    = isDirector ? (firstModule?.dir_q_mins ?? 75)   : isManager ? (firstModule?.mgr_q_mins ?? 60)   : (firstModule?.sup_q_mins ?? 45);
-  const taskMins = isDirector ? (firstModule?.dir_task_mins ?? 60) : isManager ? (firstModule?.mgr_task_mins ?? 45) : (firstModule?.sup_task_mins ?? 30);
-  const breakMins = firstModule?.break_duration_mins ?? 10;
+  const qMins        = isDirector ? (firstModule?.dir_q_mins ?? 75)   : isManager ? (firstModule?.mgr_q_mins ?? 60)   : (firstModule?.sup_q_mins ?? 45);
+  const taskMins     = isDirector ? (firstModule?.dir_task_mins ?? 60) : isManager ? (firstModule?.mgr_task_mins ?? 45) : (firstModule?.sup_task_mins ?? 30);
+  const breakMins    = firstModule?.break_duration_mins ?? 10;
   const numQuestions = (firstModule?.questions || []).length;
-  const introText = firstModule?.ac_intro_text || AC_INTRO_DEFAULT;
+  const introText    = firstModule?.ac_intro_text || AC_INTRO_DEFAULT;
+
+  const rules = [
+    { icon: "👁", title: "Tab switching is monitored", body: "Every time you switch away from this tab it is recorded and logged. Assessors will be able to see how many times you switched tabs." },
+    { icon: "⏱", title: "Your timer starts when you click Begin", body: "Each part has a time limit. Your timer begins the moment you click Begin Assessment below." },
+    { icon: "⛔", title: "Copy and paste is disabled", body: "To ensure the integrity of your assessment, pasting text into answer fields is not permitted." },
+    { icon: "🎙", title: "Audio recording available (optional)", body: "You may choose to record your answers by voice in Part 1. Microphone access will be requested if you select this option." },
+  ];
 
   const guidelines = [
     "Use Google Chrome on a laptop or desktop only",
@@ -293,7 +300,7 @@ function WelcomeScreen({ session, participant, onContinue }) {
     <div style={{ minHeight: "100vh", background: "#f7f8fa", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: SANS, padding: "2rem 1rem", overflow: "auto" }}>
       <style>{`${FONTS} body { overflow: auto !important; }`}</style>
       <div style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 16, padding: "2.5rem", width: "100%", maxWidth: 640, boxShadow: "0 4px 24px rgba(0,0,0,.06)" }}>
-        {/* Logo row */}
+        {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.75rem" }}>
           <CCMLogo scale={1.1} />
         </div>
@@ -307,7 +314,7 @@ function WelcomeScreen({ session, participant, onContinue }) {
           {cohort?.name ? ` — ${cohort.name}` : ""}
         </p>
 
-        {/* Section 1 — About */}
+        {/* Section 1 — About This Assessment */}
         <div style={{ marginBottom: "1.5rem" }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: CCM_RED, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>
             About This Assessment
@@ -339,7 +346,25 @@ function WelcomeScreen({ session, participant, onContinue }) {
           </div>
         </div>
 
-        {/* Section 3 — Guidelines */}
+        {/* Section 3 — Assessment Rules */}
+        <div style={{ marginBottom: "1.5rem" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: CCM_RED, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>
+            Assessment Rules
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {rules.map((rule, i) => (
+              <div key={i} style={{ display: "flex", gap: 14, padding: "14px 16px", background: "#f8f9fb", borderRadius: 10, border: "1px solid #eee" }}>
+                <span style={{ fontSize: 20, flexShrink: 0, marginTop: 2 }}>{rule.icon}</span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: "#111", marginBottom: 3 }}>{rule.title}</div>
+                  <div style={{ fontSize: 13, color: "#666", lineHeight: 1.6 }}>{rule.body}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Section 4 — Guidelines */}
         <div style={{ marginBottom: "1.75rem" }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: CCM_RED, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>
             Guidelines
@@ -360,72 +385,16 @@ function WelcomeScreen({ session, participant, onContinue }) {
             style={{ width: 18, height: 18, marginTop: 1, accentColor: CCM_RED, flexShrink: 0 }}
           />
           <span style={{ fontSize: 14, color: "#333", lineHeight: 1.6 }}>
-            I have read and understood the above information.
-          </span>
-        </label>
-
-        <button
-          onClick={onContinue}
-          disabled={!agreed}
-          style={btn(agreed ? CCM_RED : "#ccc", "#fff", { width: "100%", cursor: agreed ? "pointer" : "not-allowed", fontSize: 15, padding: "13px 22px" })}
-        >
-          Proceed to Assessment Rules →
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Anti-Cheat Setup Screen ───────────────────────────────────────────────────
-function AntiCheatScreen({ session, agreeChecked, setAgreeChecked, onBegin }) {
-  const assessmentName = session?.caseStudy?.name || "Assessment";
-
-  return (
-    <div style={{ minHeight: "100vh", background: "#f7f8fa", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: SANS, padding: "2rem 1rem", overflow: "auto" }}>
-      <style>{`${FONTS} body { overflow: auto !important; }`}</style>
-      <div style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 16, padding: "2.5rem", width: "100%", maxWidth: 580, boxShadow: "0 4px 24px rgba(0,0,0,.06)" }}>
-        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <CCMLogo scale={1.1} />
-          <h2 style={{ fontFamily: SERIF, fontSize: 24, margin: "1.25rem 0 0.5rem", color: "#111" }}>
-            Before You Begin
-          </h2>
-          <p style={{ fontSize: 14, color: "#666", margin: 0 }}>{assessmentName}</p>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: "2rem" }}>
-          {[
-            { icon: "👁", title: "Tab switching is monitored", body: "Every time you switch away from this tab, it is recorded and logged. Assessors will be able to see how many times you switched tabs." },
-            { icon: "⏱", title: "Your timer starts when you click Begin", body: "Each module has a time limit. Your timer will begin the moment you click the Begin Assessment button below." },
-            { icon: "⛔", title: "Copy and paste is disabled", body: "To ensure the integrity of your assessment, pasting text into answer fields is not permitted." },
-          ].map((item, i) => (
-            <div key={i} style={{ display: "flex", gap: 14, padding: "14px 16px", background: "#f8f9fb", borderRadius: 10, border: "1px solid #eee" }}>
-              <span style={{ fontSize: 22, flexShrink: 0, marginTop: 2 }}>{item.icon}</span>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, color: "#111" }}>{item.title}</div>
-                <div style={{ fontSize: 13, color: "#666", lineHeight: 1.6 }}>{item.body}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer", marginBottom: "1.5rem", padding: "14px 16px", background: agreeChecked ? "#fff7f7" : "#f8f9fb", borderRadius: 10, border: `1px solid ${agreeChecked ? CCM_RED + "44" : "#eee"}`, transition: "all 0.2s" }}>
-          <input
-            type="checkbox"
-            checked={agreeChecked}
-            onChange={e => setAgreeChecked(e.target.checked)}
-            style={{ width: 18, height: 18, marginTop: 1, accentColor: CCM_RED, flexShrink: 0 }}
-          />
-          <span style={{ fontSize: 14, color: "#333", lineHeight: 1.6 }}>
-            I understand and agree to the above conditions. I am ready to begin my assessment.
+            I have read, understood, and agree to all of the above conditions. I am ready to begin my assessment.
           </span>
         </label>
 
         <button
           onClick={onBegin}
-          disabled={!agreeChecked}
-          style={btn(agreeChecked ? CCM_RED : "#ccc", "#fff", { width: "100%", cursor: agreeChecked ? "pointer" : "not-allowed", fontSize: 16, padding: "14px 22px" })}
+          disabled={!agreed}
+          style={btn(agreed ? CCM_RED : "#ccc", "#fff", { width: "100%", cursor: agreed ? "pointer" : "not-allowed", fontSize: 15, padding: "13px 22px" })}
         >
-          Begin Assessment
+          Begin Assessment →
         </button>
       </div>
     </div>
@@ -466,7 +435,7 @@ function DoneScreen({ completionTimeSec }) {
 }
 
 // ─── Break Screen ─────────────────────────────────────────────────────────────
-function BreakScreen({ breakDurationSecs, participant, tabSwitches, showTabWarning, setShowTabWarning, onResume, onSignOut }) {
+function BreakScreen({ breakDurationSecs, participant, tabSwitches, showTabWarning, setShowTabWarning, onResume, onSkip, onSignOut }) {
   const MIN_RESUME_SECS = 120; // 2-minute minimum lock
   const [timeLeft, setTimeLeft]   = useState(breakDurationSecs);
   const [canResume, setCanResume] = useState(false);
@@ -554,6 +523,15 @@ function BreakScreen({ breakDurationSecs, participant, tabSwitches, showTabWarni
           >
             {active ? "Resume Assessment →" : `Resume available in ${formatTime(Math.max(0, MIN_RESUME_SECS - (breakDurationSecs - timeLeft)))}…`}
           </button>
+
+          <div style={{ marginTop: "1rem", textAlign: "center" }}>
+            <button
+              onClick={onSkip}
+              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "#aaa", textDecoration: "underline", fontFamily: SANS, padding: 0 }}
+            >
+              Skip break and proceed to Part 2 →
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1069,7 +1047,6 @@ export default function ParticipantApp() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [participant, setParticipant] = useState(null);
   const [session, setSession]         = useState(null);
-  const [agreeChecked, setAgreeChecked] = useState(false);
 
   // Assessment state
   const [currentModuleIdx, setCurrentModuleIdx] = useState(0);
@@ -1244,7 +1221,7 @@ export default function ParticipantApp() {
       localStorage.setItem(LS_PASS, password);
       setParticipant(p);
       setSession(sess);
-      setScreen("antiCheat");
+      setScreen("systemCheck");
     } catch {
       setLoginError("Your account was found but your assessment session could not be loaded. Please contact your administrator.");
       setLoginLoading(false);
@@ -1260,7 +1237,6 @@ export default function ParticipantApp() {
     setParticipant(null);
     setSession(null);
     setScreen("landing");
-    setAgreeChecked(false);
     setCurrentModuleIdx(0);
     setAnswers({});
     setPresentationAnswers({});
@@ -1316,14 +1292,15 @@ export default function ParticipantApp() {
     setAssessPhase("break");
   }
 
-  async function resumeFromBreak() {
-    const startedAt  = new Date(breakStartRef.current).toISOString();
-    const endedAt    = new Date().toISOString();
+  async function resumeFromBreak(skipped = false) {
+    const startedAt    = new Date(breakStartRef.current).toISOString();
+    const endedAt      = new Date().toISOString();
     const durationSecs = Math.round((Date.now() - breakStartRef.current) / 1000);
     await db.saveBreakData(participant.id, currentModule.id, {
-      started_at:              startedAt,
-      ended_at:                endedAt,
-      duration_seconds:        durationSecs,
+      started_at:                startedAt,
+      ended_at:                  endedAt,
+      duration_seconds:          durationSecs,
+      skipped:                   skipped,
       tab_switches_during_break: breakTabSwitches.current,
     });
     setAssessPhase("part2Transition");
@@ -1428,8 +1405,7 @@ export default function ParticipantApp() {
   if (screen === "landing")     return <LandingScreen isMobile={isMobile} onBegin={() => setScreen("login")} />;
   if (screen === "login")       return <LoginScreen form={loginForm} setForm={setLoginForm} error={loginError} loading={loginLoading} onSubmit={handleLogin} />;
   if (screen === "systemCheck") return <SystemCheckScreen onContinue={() => setScreen("welcome")} />;
-  if (screen === "welcome")     return <WelcomeScreen session={session} participant={participant} onContinue={() => setScreen("antiCheat")} />;
-  if (screen === "antiCheat")   return <AntiCheatScreen session={session} agreeChecked={agreeChecked} setAgreeChecked={setAgreeChecked} onBegin={beginAssessment} />;
+  if (screen === "welcome")     return <WelcomeScreen session={session} participant={participant} onBegin={beginAssessment} />;
   if (screen === "done")        return <DoneScreen completionTimeSec={completionTimeSec} />;
 
   // ── Break screen ──────────────────────────────────────────────────────────────
@@ -1443,6 +1419,7 @@ export default function ParticipantApp() {
         showTabWarning={showTabWarning}
         setShowTabWarning={setShowTabWarning}
         onResume={resumeFromBreak}
+        onSkip={() => resumeFromBreak(true)}
         onSignOut={signOut}
       />
     );
