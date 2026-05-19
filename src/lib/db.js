@@ -3,11 +3,11 @@ const SB_KEY    = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIs
 
 // ─── AI Question Suggestions ───────────────────────────────────────────────────
 
-export async function suggestQuestions(caseName, compName) {
+export async function suggestQuestions(caseName, compName, levelDesc) {
   const res = await fetch("/.netlify/functions/suggest-questions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ caseStudyName: caseName, competencyName: compName }),
+    body: JSON.stringify({ caseStudyName: caseName, competencyName: compName, levelDesc: levelDesc || "" }),
   });
   if (!res.ok) {
     let msg = `Suggestion service error ${res.status}`;

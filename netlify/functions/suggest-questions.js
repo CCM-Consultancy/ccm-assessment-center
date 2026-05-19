@@ -15,9 +15,9 @@ exports.handler = async (event) => {
     "Content-Type": "application/json",
   };
 
-  let caseStudyName, competencyName;
+  let caseStudyName, competencyName, levelDesc;
   try {
-    ({ caseStudyName, competencyName } = JSON.parse(event.body));
+    ({ caseStudyName, competencyName, levelDesc } = JSON.parse(event.body));
   } catch {
     return { statusCode: 400, headers, body: JSON.stringify({ error: "Invalid JSON body" }) };
   }
@@ -39,20 +39,23 @@ exports.handler = async (event) => {
     };
   }
 
+  const levelLine = levelDesc ? `Assessment level(s): ${levelDesc}\n- Questions must be appropriate for this level: Supervisor = team-level situations and day-to-day decisions; Manager = cross-functional situations and team leadership; Director = organizational-level and strategic decisions.` : "Assessment levels: All levels (Supervisor to Director).";
   const prompt = `You are an assessment center designer. Generate exactly 5 behavioral interview questions in STAR format for a management assessment center.
 
 Competency being assessed: "${competencyName}"
+${levelLine}
 
 STRICT RULES:
 - Each question must be fully standalone. Do NOT reference any specific case study, company, industry, sector, or scenario (including "${caseStudyName}").
 - Do NOT mention Boeing, aviation, airlines, manufacturing, finance, healthcare, or any other specific industry.
-- Every question must open with one of these STAR patterns: "Tell me about a time when...", "Describe a situation where...", "Give me an example of...", "Walk me through a time when...", or "Can you share a situation where..."
-- Questions must invite a STAR response (Situation, Task, Action, Result) — they should ask for a past experience with context, what was required, what the candidate did, and the outcome.
+- Every question must open with one of these STAR patterns: "Tell me about a time when...", "Describe a situation where...", "Give me an example of a time when...", "Walk me through a situation where...", or "Can you share a situation where..."
+- Questions must invite a STAR response (Situation, Task, Action, Result) - they should ask for a past experience with context, what was required, what the candidate did, and the outcome.
 - Do not include follow-up probes in the question text itself.
+- Each question is one sentence, clear and direct.
 
 Return ONLY a valid JSON array with no other text, markdown, or explanation. Each element must have:
-- "advanced": a nuanced version for senior/experienced candidates, with higher complexity or scope expectations
-- "standard": a more direct version for mid-level candidates, same STAR structure but with simpler framing
+- "advanced": a nuanced version for senior/experienced candidates (Director/Manager), with higher complexity, strategic scope, or ambiguity
+- "standard": a more direct version for mid-level candidates (Supervisor/Manager), same STAR structure but with simpler framing
 
 [{"advanced":"...","standard":"..."},...]`;
 

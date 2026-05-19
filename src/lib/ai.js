@@ -151,7 +151,7 @@ export const BOILERPLATE_HOW_TO_USE = "This report provides the results of the A
 
 export const BOILERPLATE_ASSESSOR_DECLARATION = "This report was produced by CCM Consultancy following a structured Assessment Center process. All ratings reflect assessor judgment based on observed behavioral evidence collected during the assessment. This report is confidential and intended solely for the use of the commissioning organization.";
 
-export async function generateIndividualReport({ participant, level, cohort, module, questions, compList, scores, answers, part2Answers, completedAt }) {
+export async function generateIndividualReport({ participant, level, cohort, module, questions, compList, scores, answers, part2Answers, completedAt, assessorRecommendation }) {
   const compScores = buildCompScores(compList, questions, scores, answers, part2Answers, level);
   const overallVals = compScores.map(c => c.overall).filter(v => v !== null);
   const overallScore = overallVals.length ? overallVals.reduce((a, b) => a + b, 0) / overallVals.length : null;
@@ -174,10 +174,21 @@ Return ONLY valid JSON:
   const part1 = JSON.parse(text1.replace(/```json|```/g, "").trim());
 
   // Call 2 — sections 5–7 with one consolidated 70-20-10 plan
+  const recInstruction = assessorRecommendation
+    ? `The assessor has determined the following recommendation: "${assessorRecommendation}". You must use this exact recommendation category in the report. Do not infer or change the recommendation based on scores.`
+    : `Determine the recommendation from scores: Recommended OR Recommended with Development OR Deferred OR Not Recommended.`;
   const prompt2 = `${header}
 
+${recInstruction}
+
+INDIVIDUAL DEVELOPMENT PLAN: 70-20-10 FRAMEWORK
+Write ONE consolidated development plan addressing the candidate's top 2 priority development areas across all competencies. Do not write a plan per competency.
+70%: On the Job - Write exactly 2 specific workplace actions. No more. Each action is one sentence maximum.
+20%: Learning from Others - Write exactly 1 specific coaching or peer learning action. One sentence maximum.
+10%: Formal Learning - Write exactly 2 specific resources, one Coursera course with title and one HBR article or book with title. One line each.
+
 Return ONLY valid JSON for sections 5-7:
-{"overallStrengths":"2-3 sentences on overall strengths across all competencies","areasForDevelopment":"2-3 sentences on top development priorities","devPlan":{"on70":["3-4 specific workplace actions targeting the top 2 development priorities"],"social20":["2-3 coaching or mentoring actions"],"formal10":["2-3 Coursera, HBR, or book recommendations with titles"]},"recommendation":"one category only: Recommended OR Recommended with Development OR Deferred OR Not Recommended","recommendationNarrative":"2-3 sentences using AC language - The candidate demonstrated..."}`;
+{"overallStrengths":"2-3 sentences on overall strengths across all competencies","areasForDevelopment":"2-3 sentences on top development priorities","devPlan":{"on70":["action 1","action 2"],"social20":["1 coaching action"],"formal10":["Coursera: Course Title","HBR/Book: Title"]},"recommendation":"${assessorRecommendation || "one category only: Recommended OR Recommended with Development OR Deferred OR Not Recommended"}","recommendationNarrative":"2-3 sentences using AC language - The candidate demonstrated..."}`;
 
   const text2 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt2 }], maxTokens: 1500 });
   if (!text2) throw new Error("No AI response (call 2)");
@@ -191,7 +202,7 @@ Return ONLY valid JSON for sections 5-7:
   };
 }
 
-export async function generateClientReport({ participant, level, cohort, module, questions, compList, scores, answers, part2Answers, completedAt, assessorName }) {
+export async function generateClientReport({ participant, level, cohort, module, questions, compList, scores, answers, part2Answers, completedAt, assessorName, assessorRecommendation }) {
   const compScores = buildCompScores(compList, questions, scores, answers, part2Answers, level);
   const overallVals = compScores.map(c => c.overall).filter(v => v !== null);
   const overallScore = overallVals.length ? overallVals.reduce((a, b) => a + b, 0) / overallVals.length : null;
@@ -205,15 +216,18 @@ PARTICIPANT: ${participant.name} | Role: ${participant.role || "Not specified"} 
 COMPETENCY SCORES:
 ${compScores.map(c => `[${c.name}] ${c.overall ? c.overall.toFixed(1) : "N/A"} (${c.label}) | Notes: ${c.notes || "None"}`).join("\n")}
 
+
+${assessorRecommendation ? `The assessor has determined the following recommendation: "${assessorRecommendation}". You must use this exact recommendation category. Do not infer or change it.` : "Determine the recommendation from scores."}
+
 Return ONLY valid JSON:
-{"executiveSummary":"3-4 sentences","competencies":[{"name":"exact name","evidence":"one concise sentence of evidence","developmentPriority":"one line development priority"}],"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","devSummary":[{"competency":"name","action":"one line recommended action"}],"recommendation":"one category only","recommendationNarrative":"2-3 formal sentences"}`;
+{"executiveSummary":"3-4 sentences","competencies":[{"name":"exact name","evidence":"one concise sentence of evidence","developmentPriority":"one line development priority"}],"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","devSummary":[{"competency":"name","action":"one line recommended action"}],"recommendation":"${assessorRecommendation || "one category only: Recommended OR Recommended with Development OR Deferred OR Not Recommended"}","recommendationNarrative":"2-3 formal sentences"}`;
 
   const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 2000 });
   if (!text) throw new Error("No AI response");
   return { ...JSON.parse(text.replace(/```json|```/g, "").trim()), assessorDeclaration: BOILERPLATE_ASSESSOR_DECLARATION };
 }
 
-export async function generateCohortReport({ cohortName, moduleName, cohortData, compList, assessorName }) {
+export async function generateCohortReport({ cohortName, moduleName, cohortData, compList, assessorName, assessorRecommendation }) {
   // cohortData: [{ name, role, level, overall, compScores: [{name, overall}] }]
   const avgByComp = compList.map(comp => {
     const vals = cohortData.map(p => (p.compScores.find(c => c.name === comp.name) || {}).overall).filter(v => v !== null && v !== undefined);
@@ -253,6 +267,68 @@ Return ONLY valid JSON:
   const part2 = JSON.parse(text2.replace(/```json|```/g, "").trim());
 
   return { ...part1, participantSummaries: part2.participantSummaries || [], assessorDeclaration: BOILERPLATE_ASSESSOR_DECLARATION };
+}
+
+export async function generateReportFromNotes({ participant, level, cohort, module, compList, scores, assessorNotes, overallNarrative, recommendation, type }) {
+  const compLines = compList.map(c => {
+    const note = assessorNotes[c.id] || "No notes provided.";
+    return `[${c.name}]\nAssessor observations: ${note}`;
+  }).join("\n\n");
+
+  const header = `You are an expert Assessment Center report writer for CCM Consultancy. ${AC_RULES}
+
+PARTICIPANT: ${participant?.name} | Role: ${participant?.role || "Not specified"} | Level: ${level?.name || "Not specified"} | Cohort: ${cohort?.name || "Not specified"} | Module: ${module?.name || module?.title || "Assessment Module"}
+
+ASSESSOR RECOMMENDATION: ${recommendation || "Not specified"}
+The assessor has determined this recommendation. Use it exactly - do not change it.
+
+ASSESSOR OBSERVATIONS BY COMPETENCY:
+${compLines}
+
+OVERALL ASSESSOR NARRATIVE:
+${overallNarrative || "No overall narrative provided."}`;
+
+  if (type === "individual") {
+    const prompt1 = `${header}
+
+Using only the assessor's observations above (not your own inference), write the individual report sections.
+
+Return ONLY valid JSON:
+{"executiveSummary":"3-4 sentences based on the assessor observations","assessmentMethodology":"${BOILERPLATE_METHODOLOGY}","howToUse":"${BOILERPLATE_HOW_TO_USE}","competencies":[{"name":"exact competency name","measures":"1 sentence on what this competency measures","demonstrated":"2 sentences of specific evidence from assessor observations - The candidate demonstrated...","strength":"1 sentence strength from observations","developmentOpportunity":"1 sentence development area from observations"}]}`;
+
+    const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 1500 });
+    if (!text1) throw new Error("No AI response (call 1)");
+    const part1 = JSON.parse(text1.replace(/```json|```/g, "").trim());
+
+    const prompt2 = `${header}
+
+Write sections 5-7. The recommendation is locked to: "${recommendation}". Use it exactly.
+70-20-10 plan: exactly 2 on-the-job actions, exactly 1 coaching action, exactly 2 formal resources (one Coursera course, one HBR/book).
+
+Return ONLY valid JSON:
+{"overallStrengths":"2-3 sentences from assessor observations","areasForDevelopment":"2-3 sentences from assessor observations","devPlan":{"on70":["action 1","action 2"],"social20":["1 coaching action"],"formal10":["Coursera: Course Title","HBR/Book: Title"]},"recommendation":"${recommendation}","recommendationNarrative":"2-3 sentences using AC language - The candidate demonstrated..."}`;
+
+    const text2 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt2 }], maxTokens: 1000 });
+    if (!text2) throw new Error("No AI response (call 2)");
+    const part2 = JSON.parse(text2.replace(/```json|```/g, "").trim());
+
+    return { ...part1, ...part2 };
+  }
+
+  if (type === "client") {
+    const prompt = `${header}
+
+Write a concise client report using the assessor's observations. Recommendation is locked to: "${recommendation}". Use it exactly.
+
+Return ONLY valid JSON:
+{"executiveSummary":"3-4 sentences","assessorDeclaration":"${BOILERPLATE_ASSESSOR_DECLARATION}","competencies":[{"name":"exact competency name","evidence":"one sentence from assessor observations","developmentPriority":"one line development area"}],"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","devSummary":[{"competency":"name","action":"one recommended action"}],"recommendation":"${recommendation}","recommendationNarrative":"2-3 formal sentences - The candidate demonstrated..."}`;
+
+    const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 1500 });
+    if (!text) throw new Error("No AI response");
+    return JSON.parse(text.replace(/```json|```/g, "").trim());
+  }
+
+  throw new Error("generateReportFromNotes: unsupported type " + type);
 }
 
 // ─── PDF helpers ───────────────────────────────────────────────────────────────
@@ -514,7 +590,7 @@ export async function downloadParticipantPDF({
     addSection("Next Steps");
     checkPage(30);
     doc.setFontSize(10); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
-    [`${participant.name} is encouraged to share this development plan with their line manager within the next two weeks and to agree on which activities to prioritise in the first 90 days.`, "The recommended approach is to begin with one activity from each of the three 70-20-10 categories for each assessed competency, and to review progress monthly in a structured one-to-one conversation.", "CCM Consultancy recommends a formal follow-up review at 90 days to assess progress and adjust the plan as needed."].forEach(ns => {
+    [`${participant.name} is encouraged to share this development plan with their line manager within the next two weeks and to agree on which activities to prioritize in the first 90 days.`, "The recommended approach is to begin with one activity from each of the three 70-20-10 categories for each assessed competency, and to review progress monthly in a structured one-to-one conversation.", "CCM Consultancy recommends a formal follow-up review at 90 days to assess progress and adjust the plan as needed."].forEach(ns => {
       const lines = doc.splitTextToSize(ns, cW);
       doc.text(lines, margin, getY()); setDocY(getY() + lines.length * 5 + 4);
     });

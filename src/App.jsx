@@ -83,6 +83,8 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const [mbTimeSaving,   setMbTimeSaving]   = useState(false);
   const [mbLoading,      setMbLoading]      = useState(false);
   const [mbSaving,       setMbSaving]       = useState(false);
+  const [mbAssignedComps, setMbAssignedComps] = useState([]);
+  const [mbPart2CompIds,  setMbPart2CompIds]  = useState([]);
   const [mbUploading,    setMbUploading]    = useState(null); // "image_1"|"image_2"|"image_3"|"document"|null
   const [mbScenEditing,  setMbScenEditing]  = useState(false);
   const [mbNewName,      setMbNewName]      = useState("");
@@ -134,7 +136,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const [rpSelKey,        setRpSelKey]        = useState(null);
   const [rpQuestions,     setRpQuestions]     = useState([]);
   const [rpCompetencies,  setRpCompetencies]  = useState([]);
-  const [rpScores,        setRpScores]        = useState({ part1:{}, part2:{} });
+  const [rpScores,        setRpScores]        = useState({ part1:{}, part2:{}, recommendation:"" });
   const [rpSaving,        setRpSaving]        = useState(false);
   const [rpReport,        setRpReport]        = useState(null);
   const [rpReportLoading, setRpReportLoading] = useState(false);
@@ -142,6 +144,8 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const [rpEditMode,      setRpEditMode]      = useState(false);
   const [rpEditContent,   setRpEditContent]   = useState(null);
   const [rpOrigContent,   setRpOrigContent]   = useState(null);
+  const [rpManualNotes,   setRpManualNotes]   = useState(null); // { type, notes:{}, overallNarrative:"" }
+  const [rpNotesGenerating, setRpNotesGenerating] = useState(false);
 
   // ─── Self-registration ────────────────────────────────────────────────────────
   const [loginMode,  setLoginMode]  = useState("signin"); // "signin" | "register"
@@ -456,16 +460,20 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   async function loadModuleBuilder(csId) {
     if (!csId) {
       setMbModules([]); setMbLevels([]); setMbModuleLevels([]);
-      setMbScenarios([]); setMbSelModId(null);
+      setMbScenarios([]); setMbSelModId(null); setMbAssignedComps([]);
       return;
     }
     setMbLoading(true);
     try {
-      const data = await db.getFullCaseStudy(csId);
+      const [data, assigned] = await Promise.all([
+        db.getFullCaseStudy(csId),
+        db.getAssignedCompetencies(csId),
+      ]);
       setMbModules(data.modules      || []);
       setMbLevels(data.levels        || []);
       setMbModuleLevels(data.moduleLevels || []);
       setMbScenarios(data.scenarios  || []);
+      setMbAssignedComps(assigned    || []);
       setMbSelModId(null);
       setMbModForm({ name:"", description:"", module_type:"questions" });
       setMbScenForm({ standard:"", advanced:"" });
@@ -492,6 +500,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
     });
     const levelIds = mbModuleLevels.filter(ml => ml.module_id === moduleId).map(ml => ml.level_id);
     setMbLevelIds(levelIds);
+    setMbPart2CompIds(mod?.part2_competency_ids || []);
     const scen = mbScenarios.find(s => s.module_id === moduleId);
     setMbScenForm({
       case_study_text:  scen?.case_study_text  || "",
@@ -539,13 +548,14 @@ const [editCompSaving, setEditCompSaving] = useState(false);
       const mod = mbModules.find(m => m.id === mbSelModId);
       // 1. Save module info
       const savedMod = await db.saveModule({
-        id:            mbSelModId,
-        case_study_id: mbCsId,
-        title:         mbModForm.name.trim(),
-        display_order: mod?.display_order ?? 0,
-        module_type:   mbModForm.module_type || "questions",
-        task_brief:    mbModForm.task_brief  || "",
-        ac_intro_text: mbModForm.ac_intro_text || "",
+        id:                   mbSelModId,
+        case_study_id:        mbCsId,
+        title:                mbModForm.name.trim(),
+        display_order:        mod?.display_order ?? 0,
+        module_type:          mbModForm.module_type || "questions",
+        task_brief:           mbModForm.task_brief  || "",
+        ac_intro_text:        mbModForm.ac_intro_text || "",
+        part2_competency_ids: mbPart2CompIds,
       });
       // 2. Save level access
       await db.saveModuleLevels(mbSelModId, mbLevelIds);
@@ -795,12 +805,16 @@ async function deleteLibComp(id) {
     // Reset content but leave panel open — caller is responsible for opening it
     setAiSuggestions([]); setAiSelected(new Set()); setAiError(null); setAiLoading(true);
     if (!compId) { setAiLoading(false); return; }
-    const csName      = qgData?.caseStudy?.name || "the case study";
-    const assignedA   = qgAssignedComps.find(a => a.competency_id === compId);
-    const legacyComp  = (qgData?.competencies || []).find(c => c.id === compId);
-    const compName    = assignedA?.competency?.name || legacyComp?.name || compId;
+    const csName     = qgData?.caseStudy?.name || "the case study";
+    const assignedA  = qgAssignedComps.find(a => a.competency_id === compId);
+    const legacyComp = (qgData?.competencies || []).find(c => c.id === compId);
+    const compName   = assignedA?.competency?.name || legacyComp?.name || compId;
+    // Determine level(s) for this module
+    const modLevelIds   = (qgData?.moduleLevels || []).filter(ml => ml.module_id === qgModuleId).map(ml => ml.level_id);
+    const modLevelNames = allLevels.filter(l => modLevelIds.includes(l.id)).map(l => l.name);
+    const levelDesc     = modLevelNames.length > 0 ? modLevelNames.join(", ") : "";
     try {
-      const suggestions = await db.suggestQuestions(csName, compName);
+      const suggestions = await db.suggestQuestions(csName, compName, levelDesc);
       setAiSuggestions(Array.isArray(suggestions) ? suggestions.slice(0, 5) : []);
     } catch(e) {
       setAiError(e.message || "Could not load suggestions - try again.");
@@ -1228,7 +1242,7 @@ ${compsHtml}
       setRpQuestions(questions);
       setRpCompetencies(competencies);
       const ex = result.scores || {};
-      setRpScores({ part1: ex.part1 || {}, part2: ex.part2 || {} });
+      setRpScores({ part1: ex.part1 || {}, part2: ex.part2 || {}, recommendation: ex.recommendation || "" });
     } catch(e) { notify("Failed to load questions: " + e.message); }
   }
 
@@ -1602,6 +1616,28 @@ ${compsHtml}
                         <option value="presentation">Live Presentation</option>
                       </select>
                     </div>
+                    {/* Part 2 competency mapping */}
+                    {mbAssignedComps.length > 0 && (
+                      <div style={{ marginBottom:16, padding:"14px", background:"#f8fafc", border:"1px solid #e5e7ef", borderRadius:8 }}>
+                        <div style={{ fontSize:13, fontWeight:700, marginBottom:4 }}>Part 2: Case Study Competencies</div>
+                        <p style={{ fontSize:12, color:"#888", margin:"0 0 10px" }}>
+                          Select which competencies are assessed in the Case Study exercise. These may be the same as or different from the behavioral interview competencies.
+                        </p>
+                        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                          {mbAssignedComps.map(ac => (
+                            <label key={ac.competency_id} style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, cursor:"pointer" }}>
+                              <input
+                                type="checkbox"
+                                checked={mbPart2CompIds.includes(ac.competency_id)}
+                                onChange={e => setMbPart2CompIds(ids => e.target.checked ? [...ids, ac.competency_id] : ids.filter(id => id !== ac.competency_id))}
+                              />
+                              <span style={{ fontWeight:500 }}>{ac.competency?.name || ac.competency_id}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <p style={{ fontSize:11, color:"#888", margin:"10px 0 0" }}>Saved when you click Save Module below.</p>
+                      </div>
+                    )}
                     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px 24px" }}>
                       {[
                         { key:"reading_time_mins",   label:"Reading time (all levels)" },
@@ -3029,6 +3065,7 @@ ${compsHtml}
             setRpReportType(type);
             setRpReport(null);
             try {
+              const assessorRecommendation = rpScores.recommendation || null;
               const base = {
                 participant: selResult.participant,
                 level:       selResult.level,
@@ -3041,6 +3078,7 @@ ${compsHtml}
                 part2Answers: selResult.part2_answers,
                 completedAt: selResult.completed_at,
                 assessorName: "CCM Consultancy",
+                assessorRecommendation,
               };
               let content;
               if (type === "individual") {
@@ -3080,6 +3118,7 @@ ${compsHtml}
                   cohortData,
                   compList,
                   assessorName: "CCM Consultancy",
+                  assessorRecommendation,
                 });
                 content._cohortData   = cohortData;
                 content._compList     = compList.map(c=>c.name);
@@ -3440,6 +3479,36 @@ ${compsHtml}
             setRpEditContent(JSON.parse(JSON.stringify(empty)));
             setRpEditMode(true);
           }
+          function openNotesForm(type) {
+            if (!selResult) return;
+            const notes = {};
+            compList.forEach(c => { notes[c.id] = ""; });
+            setRpManualNotes({ type, notes, overallNarrative: "" });
+          }
+          async function doGenerateFromNotes() {
+            if (!rpManualNotes || !selResult) return;
+            setRpNotesGenerating(true);
+            try {
+              const content = await ai.generateReportFromNotes({
+                participant:      selResult.participant,
+                level:            selResult.level,
+                cohort:           selResult.cohort,
+                module:           selResult.module,
+                compList,
+                scores:           rpScores,
+                assessorNotes:    rpManualNotes.notes,
+                overallNarrative: rpManualNotes.overallNarrative,
+                recommendation:   rpScores.recommendation || rpManualNotes.recommendation || "Not Specified",
+                type:             rpManualNotes.type,
+              });
+              setRpReport({ type: rpManualNotes.type, content, selResult: { ...selResult }, compList, rpScores, rpQuestions, completedAt: selResult.completed_at });
+              setRpOrigContent(null);
+              setRpEditContent(null);
+              setRpEditMode(false);
+              setRpManualNotes(null);
+            } catch(e) { notify("Report generation failed: " + e.message); }
+            setRpNotesGenerating(false);
+          }
 
           // ── Edit-mode render functions ─────────────────────────────────────────
           const TA_STYLE = { width:"100%", padding:"8px 10px", fontSize:13, border:"1px solid #c0c0c0", borderRadius:6, resize:"vertical", lineHeight:1.6, fontFamily:"inherit", marginBottom:8, boxSizing:"border-box" };
@@ -3688,6 +3757,79 @@ ${compsHtml}
                 </>
               )}
 
+              {/* Notes form modal */}
+              {rpManualNotes && (
+                <>
+                  <div style={{ position:"fixed", inset:0, zIndex:999, background:"rgba(0,0,0,0.65)" }} />
+                  <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:1001, background:"#1a1a1a", padding:"10px 20px", display:"flex", alignItems:"center", gap:10 }}>
+                    <div style={{ color:"#fff", fontWeight:700, fontSize:13 }}>
+                      Generate {rpManualNotes.type === "individual" ? "Individual" : "Client"} Report from Notes
+                    </div>
+                    <div style={{ flex:1 }} />
+                    <button onClick={() => setRpManualNotes(null)}
+                      style={{ background:"transparent", color:"#aaa", border:"1px solid #555", borderRadius:6, padding:"6px 12px", fontSize:12, cursor:"pointer" }}>
+                      ✕ Cancel
+                    </button>
+                  </div>
+                  <div style={{ position:"fixed", top:50, left:"50%", transform:"translateX(-50%)", width:"min(760px, 97vw)", bottom:0, overflowY:"auto", background:"#fff", zIndex:1000, padding:"28px" }}>
+                    <p style={{ fontSize:13, color:"#555", marginBottom:20 }}>
+                      Fill in your observations below. Claude will use these notes to write the full structured report. Scores are pulled automatically from the scoring panel.
+                    </p>
+                    {compList.map(comp => (
+                      <div key={comp.id} style={{ marginBottom:20 }}>
+                        <label style={{ fontSize:13, fontWeight:700, color:"#333", display:"block", marginBottom:4 }}>
+                          {comp.name}
+                        </label>
+                        <textarea
+                          rows={3}
+                          style={{ width:"100%", padding:"8px 10px", fontSize:13, border:"1px solid #c0c0c0", borderRadius:6, resize:"vertical", fontFamily:"inherit", boxSizing:"border-box" }}
+                          placeholder="Describe what the candidate demonstrated, one key strength, and one development area. (max 150 words)"
+                          value={rpManualNotes.notes[comp.id] || ""}
+                          onChange={e => setRpManualNotes(prev => ({ ...prev, notes: { ...prev.notes, [comp.id]: e.target.value } }))}
+                        />
+                      </div>
+                    ))}
+                    <div style={{ marginBottom:20 }}>
+                      <label style={{ fontSize:13, fontWeight:700, color:"#333", display:"block", marginBottom:4 }}>Recommendation</label>
+                      {rpScores.recommendation ? (
+                        <div style={{ padding:"8px 12px", background:"#fff7f7", border:`1px solid ${CCM_RED}`, borderRadius:6, fontSize:13, fontWeight:700, color:CCM_RED }}>
+                          {rpScores.recommendation} <span style={{ fontSize:11, color:"#888", fontWeight:400 }}>(locked from scores panel)</span>
+                        </div>
+                      ) : (
+                        <select
+                          value={rpManualNotes.recommendation || ""}
+                          onChange={e => setRpManualNotes(prev => ({ ...prev, recommendation: e.target.value }))}
+                          style={{ width:"100%", padding:"8px 10px", fontSize:13, border:"1px solid #c0c0c0", borderRadius:6 }}
+                        >
+                          <option value="">Select recommendation…</option>
+                          {["Recommended","Recommended with Development","Deferred","Not Recommended"].map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      )}
+                    </div>
+                    <div style={{ marginBottom:28 }}>
+                      <label style={{ fontSize:13, fontWeight:700, color:"#333", display:"block", marginBottom:4 }}>Overall Assessment Narrative</label>
+                      <textarea
+                        rows={4}
+                        style={{ width:"100%", padding:"8px 10px", fontSize:13, border:"1px solid #c0c0c0", borderRadius:6, resize:"vertical", fontFamily:"inherit", boxSizing:"border-box" }}
+                        placeholder="Write 2-3 sentences summarising the candidate's overall performance and justifying the recommendation. (max 100 words)"
+                        value={rpManualNotes.overallNarrative}
+                        onChange={e => setRpManualNotes(prev => ({ ...prev, overallNarrative: e.target.value }))}
+                      />
+                    </div>
+                    <button
+                      onClick={doGenerateFromNotes}
+                      disabled={rpNotesGenerating}
+                      style={S.btn(CCM_RED,"#fff",{ fontSize:14, padding:"12px 28px", opacity:rpNotesGenerating?0.6:1 })}
+                    >
+                      {rpNotesGenerating ? "Generating Report…" : "Generate Report from Notes"}
+                    </button>
+                    {rpNotesGenerating && (
+                      <p style={{ fontSize:11, color:"#888", marginTop:8, fontStyle:"italic" }}>Claude is writing the report - this usually takes 15-30 seconds…</p>
+                    )}
+                  </div>
+                </>
+              )}
+
               {/* Left sidebar — submission list */}
               <div style={{ width:300, borderRight:"1px solid #e5e5e5", background:"#fafafa", overflowY:"auto", flexShrink:0 }}>
                 <div style={{ padding:"14px 16px", borderBottom:"1px solid #e5e5e5", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
@@ -3851,69 +3993,147 @@ ${compsHtml}
                             </div>
                           )}
                           <div style={{ borderTop:"1px solid #f0f0f0", paddingTop:"1rem" }}>
-                            <div style={{ ...S.label, marginBottom:"0.75rem" }}>Score by Competency</div>
-                            {compList.map((comp, ci) => (
-                              <div key={comp.id} style={{
-                                marginBottom: ci < compList.length-1 ? "1.25rem" : 0,
-                                paddingBottom: ci < compList.length-1 ? "1.25rem" : 0,
-                                borderBottom: ci < compList.length-1 ? "1px dashed #f0f0f0" : "none",
-                              }}>
-                                <div style={{ fontSize:12, fontWeight:600, color:"#555", marginBottom:8 }}>{comp.name}</div>
-                                {scoreInput("part2", comp.id)}
-                                <div style={{ marginTop:8 }}>
-                                  <input style={{ ...S.input, fontSize:12 }}
-                                    placeholder="Assessor notes (optional)"
-                                    value={(rpScores.part2[comp.id]||{}).notes || ""}
-                                    onChange={e => setRpScores(prev => ({
-                                      ...prev, part2: { ...prev.part2, [comp.id]: { ...(prev.part2[comp.id]||{}), notes:e.target.value } }
-                                    }))}
-                                  />
-                                </div>
-                              </div>
-                            ))}
+                            {(() => {
+                              const selMod2 = rpModules.find(m => m.id === selResult?.module_id);
+                              const p2Ids2  = selMod2?.part2_competency_ids || [];
+                              const p2CompList = p2Ids2.length > 0 ? compList.filter(c => p2Ids2.includes(c.id)) : compList;
+                              return (
+                                <>
+                                  <div style={{ ...S.label, marginBottom:"0.75rem" }}>
+                                    Part 2: Case Study Exercise - Score by Competency
+                                    {p2Ids2.length > 0 && (
+                                      <span style={{ fontSize:11, fontWeight:400, color:"#888", marginLeft:6 }}>Showing competencies mapped to the Case Study exercise.</span>
+                                    )}
+                                  </div>
+                                  {p2CompList.map((comp, ci) => (
+                                    <div key={comp.id} style={{
+                                      marginBottom: ci < p2CompList.length-1 ? "1.25rem" : 0,
+                                      paddingBottom: ci < p2CompList.length-1 ? "1.25rem" : 0,
+                                      borderBottom: ci < p2CompList.length-1 ? "1px dashed #f0f0f0" : "none",
+                                    }}>
+                                      <div style={{ fontSize:12, fontWeight:600, color:"#555", marginBottom:8 }}>{comp.name}</div>
+                                      {scoreInput("part2", comp.id)}
+                                      <div style={{ marginTop:8 }}>
+                                        <input style={{ ...S.input, fontSize:12 }}
+                                          placeholder="Assessor notes (optional)"
+                                          value={(rpScores.part2[comp.id]||{}).notes || ""}
+                                          onChange={e => setRpScores(prev => ({
+                                            ...prev, part2: { ...prev.part2, [comp.id]: { ...(prev.part2[comp.id]||{}), notes:e.target.value } }
+                                          }))}
+                                        />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </>
+                              );
+                            })()}
                           </div>
                         </>)}
                       </div>
 
                       {/* Score summary table */}
-                      <div style={{ ...S.card, marginBottom:"1.5rem" }}>
-                        <div style={{ fontSize:11, fontWeight:700, color:CCM_RED, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"1rem" }}>
-                          Score Summary
-                        </div>
-                        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
-                          <thead>
-                            <tr style={{ borderBottom:"2px solid #e5e5e5" }}>
-                              {["Competency","Part 1 Avg","Part 2 Score","Overall"].map(h => (
-                                <th key={h} style={{ padding:"8px 12px", textAlign:h==="Competency"?"left":"center",
-                                  fontSize:11, fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.05em" }}>{h}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {compList.map((comp, i) => {
-                              const a = p1Avg(comp.id), b = p2Score(comp.id), ov = compOverall(comp.id);
-                              return (
-                                <tr key={comp.id} style={{ background: i%2===0?"#fafafa":"#fff" }}>
-                                  <td style={{ padding:"10px 12px", fontWeight:600 }}>{comp.name}</td>
-                                  <td style={{ padding:"10px 12px", textAlign:"center",
-                                    color:a!==null?SCORE_COLORS[clamp(a)]:"#ccc", fontWeight:a!==null?600:400 }}>{fmt(a)}</td>
-                                  <td style={{ padding:"10px 12px", textAlign:"center",
-                                    color:b!==null?SCORE_COLORS[b]:"#ccc", fontWeight:b!==null?600:400 }}>{fmt(b)}</td>
-                                  <td style={{ padding:"10px 12px", textAlign:"center", fontWeight:700,
-                                    color:ov!==null?SCORE_COLORS[clamp(ov)]:"#ccc" }}>{fmt(ov)}</td>
+                      {(() => {
+                        const selMod = rpModules.find(m => m.id === selResult?.module_id);
+                        const p2Ids  = selMod?.part2_competency_ids || [];
+                        // Determine which comps appear in which parts
+                        const summaryRows = compList.map(comp => {
+                          const inP1 = (comp.questions || []).length > 0;
+                          const inP2 = p2Ids.length === 0 ? inP1 : p2Ids.includes(comp.id);
+                          const a    = inP1 ? p1Avg(comp.id) : null;
+                          const b    = inP2 ? p2Score(comp.id) : null;
+                          const p1IE = inP1 && !!(rpScores.part1[(comp.questions || [])[0]?.id]?.not_attempted);
+                          const p2IE = inP2 && !!(rpScores.part2[comp.id]?.not_attempted);
+                          const ov   = (() => {
+                            if (p1IE && p2IE) return null;
+                            const v1 = p1IE ? null : a;
+                            const v2 = p2IE ? null : b;
+                            if (v1 !== null && v2 !== null) return (v1 + v2) / 2;
+                            return v1 ?? v2 ?? null;
+                          })();
+                          const isIE = p1IE || p2IE;
+                          const note = !inP1 ? "Part 2 only" : !inP2 ? "Part 1 only" : null;
+                          return { comp, inP1, inP2, a, b, p1IE, p2IE, ov, isIE, note };
+                        });
+                        const ovVals = summaryRows.filter(r => !r.isIE && r.ov !== null).map(r => r.ov);
+                        const grandOv = ovVals.length ? ovVals.reduce((s,v)=>s+v,0)/ovVals.length : null;
+                        const ieCount = summaryRows.filter(r => r.isIE).length;
+                        const majorityIE = ieCount > summaryRows.length / 2;
+                        const hasAnyIE = summaryRows.some(r => r.isIE);
+                        return (
+                          <div style={{ ...S.card, marginBottom:"1.5rem" }}>
+                            <div style={{ fontSize:11, fontWeight:700, color:CCM_RED, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"1rem" }}>
+                              Score Summary
+                            </div>
+                            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+                              <thead>
+                                <tr style={{ borderBottom:"2px solid #e5e5e5" }}>
+                                  {["Competency","Part 1 Avg","Part 2 Score","Overall"].map(h => (
+                                    <th key={h} style={{ padding:"8px 12px", textAlign:h==="Competency"?"left":"center",
+                                      fontSize:11, fontWeight:700, color:"#888", textTransform:"uppercase", letterSpacing:"0.05em" }}>{h}</th>
+                                  ))}
                                 </tr>
-                              );
-                            })}
-                            <tr style={{ borderTop:"2px solid #e5e5e5" }}>
-                              <td style={{ padding:"10px 12px", fontWeight:700 }}>OVERALL</td>
-                              <td /><td />
-                              <td style={{ padding:"10px 12px", textAlign:"center", fontWeight:700, fontSize:16,
-                                color:grandOverall!==null?SCORE_COLORS[clamp(grandOverall)]:"#ccc" }}>
-                                {fmt(grandOverall)}
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
+                              </thead>
+                              <tbody>
+                                {summaryRows.map(({ comp, inP1, inP2, a, b, p1IE, p2IE, ov, isIE, note }, i) => (
+                                  <tr key={comp.id} style={{ background: i%2===0?"#fafafa":"#fff" }}>
+                                    <td style={{ padding:"10px 12px", fontWeight:600 }}>
+                                      {comp.name}
+                                      {note && <span style={{ fontSize:10, color:"#aaa", fontWeight:400, marginLeft:6 }}>({note})</span>}
+                                    </td>
+                                    <td style={{ padding:"10px 12px", textAlign:"center", fontWeight: inP1?600:400, color: p1IE?"#ea580c":a!==null?SCORE_COLORS[clamp(a)]:"#ccc" }}>
+                                      {!inP1 ? "-" : p1IE ? "IE" : fmt(a)}
+                                    </td>
+                                    <td style={{ padding:"10px 12px", textAlign:"center", fontWeight: inP2?600:400, color: p2IE?"#ea580c":b!==null?SCORE_COLORS[b]:"#ccc" }}>
+                                      {!inP2 ? "-" : p2IE ? "IE" : fmt(b)}
+                                    </td>
+                                    <td style={{ padding:"10px 12px", textAlign:"center", fontWeight:700,
+                                      color:isIE?"#ea580c":ov!==null?SCORE_COLORS[clamp(ov)]:"#ccc" }}>
+                                      {isIE ? "IE" : fmt(ov)}
+                                    </td>
+                                  </tr>
+                                ))}
+                                <tr style={{ borderTop:"2px solid #e5e5e5" }}>
+                                  <td style={{ padding:"10px 12px", fontWeight:700 }}>OVERALL</td>
+                                  <td /><td />
+                                  <td style={{ padding:"10px 12px", textAlign:"center", fontWeight:700, fontSize:16,
+                                    color:grandOv!==null?SCORE_COLORS[clamp(grandOv)]:"#ccc" }}>
+                                    {fmt(grandOv)}
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                            {hasAnyIE && (
+                              <p style={{ fontSize:11, color:"#ea580c", marginTop:8, marginBottom:0 }}>
+                                IE = Insufficient Evidence - excluded from overall average calculation.
+                              </p>
+                            )}
+                            {majorityIE && (
+                              <div style={{ marginTop:8, padding:"8px 12px", background:"#fff7ed", border:"1px solid #fdba74", borderRadius:6, fontSize:11, color:"#92400e" }}>
+                                Note: The overall score should be interpreted with caution. Insufficient evidence was provided across a significant number of competencies, limiting the assessor's ability to make a full evaluation.
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Assessor Recommendation */}
+                      <div style={{ ...S.card, marginBottom:"1.5rem" }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:CCM_RED, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"0.75rem" }}>
+                          Assessor Recommendation
+                        </div>
+                        <select
+                          value={rpScores.recommendation || ""}
+                          onChange={e => setRpScores(prev => ({ ...prev, recommendation: e.target.value }))}
+                          style={{ ...S.input, fontWeight:600, color: rpScores.recommendation ? CCM_RED : "#aaa" }}
+                        >
+                          <option value="">Select recommendation…</option>
+                          {["Recommended","Recommended with Development","Deferred","Not Recommended"].map(o => (
+                            <option key={o} value={o}>{o}</option>
+                          ))}
+                        </select>
+                        <p style={{ fontSize:11, color:"#888", margin:"6px 0 0" }}>
+                          This recommendation is locked into all AI-generated reports. Save scores to persist it.
+                        </p>
                       </div>
 
                       {/* Bottom save */}
@@ -3961,20 +4181,19 @@ ${compsHtml}
                             Claude is writing the report - this usually takes 15–30 seconds…
                           </p>
                         )}
-                        {/* Write Manually row */}
+                        {/* Notes-based generation row */}
                         <div style={{ borderTop:"1px solid #f0f0f0", paddingTop:"0.75rem" }}>
-                          <div style={{ fontSize:11, color:"#aaa", marginBottom:6 }}>Write Manually - fill in each section yourself</div>
+                          <div style={{ fontSize:11, color:"#aaa", marginBottom:6 }}>Generate from Assessor Notes - enter observations and let AI write the full report</div>
                           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                             {[
                               { type:"individual", label:"Individual" },
                               { type:"client",     label:"Client" },
-                              { type:"cohort",     label:"Cohort" },
                             ].map(({ type, label }) => (
                               <button key={type}
-                                onClick={() => openManualReport(type)}
+                                onClick={() => openNotesForm(type)}
                                 disabled={rpReportLoading}
                                 style={{ padding:"7px 14px", borderRadius:6, fontSize:12, fontWeight:600, cursor:"pointer", border:"1.5px solid #e0e7ef", background:"#f8fafc", color:"#374151" }}>
-                                ✏ {label}
+                                📝 {label}
                               </button>
                             ))}
                           </div>
