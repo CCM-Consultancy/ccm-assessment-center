@@ -3775,7 +3775,10 @@ ${compsHtml}
                               {comp.name}
                             </div>
                             {comp.questions.map((q, qi) => {
-                              const ans   = (selResult.answers?.questions || {})[q.id] || "";
+                              const rawAns = (selResult.answers?.questions || {})[q.id];
+                              const ans    = typeof rawAns === "string" ? rawAns : (rawAns?.text || rawAns?.transcript || "");
+                              const hasAudio = !!(rawAns?.has_audio);
+                              const extraNotes = typeof rawAns === "object" ? rawAns?.additional_notes : null;
                               const qText = useAdv ? (q.text_advanced || q.text_standard) : (q.text_standard || q.text_advanced);
                               return (
                                 <div key={q.id} style={{
@@ -3785,11 +3788,21 @@ ${compsHtml}
                                 }}>
                                   <div style={{ fontSize:13, fontWeight:600, color:"#111", marginBottom:8, lineHeight:1.5 }}>
                                     Q{qi+1}. {qText}
+                                    {hasAudio && (
+                                      <span style={{ marginLeft:8, fontSize:11, background:"#f0f9ff", color:"#0369a1", border:"1px solid #bae6fd", borderRadius:6, padding:"1px 8px", fontWeight:700, verticalAlign:"middle" }}>
+                                        🎤 Audio response
+                                      </span>
+                                    )}
                                   </div>
                                   {ans ? (
                                     <div style={{ fontSize:13, color:"#333", background:"#f8f9fb", border:"1px solid #e8e8e8",
                                       borderRadius:8, padding:"12px 14px", lineHeight:1.75, marginBottom:10, whiteSpace:"pre-wrap" }}>
                                       {ans}
+                                      {extraNotes && (
+                                        <div style={{ marginTop:8, paddingTop:8, borderTop:"1px solid #eee", fontSize:12, color:"#666" }}>
+                                          <strong>Additional notes:</strong> {extraNotes}
+                                        </div>
+                                      )}
                                     </div>
                                   ) : (
                                     <div style={{ fontSize:12, color:"#bbb", fontStyle:"italic", marginBottom:10 }}>No answer recorded</div>

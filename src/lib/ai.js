@@ -28,9 +28,16 @@ export function detectCompetency(text, competencies = []) {
 }
 
 // generateAIRatings — blank answers get score 0 and are flagged not_attempted
+function extractAnsText(raw) {
+  if (!raw) return "";
+  if (typeof raw === "string") return raw;
+  return raw.text || raw.transcript || "";
+}
+
 export async function generateAIRatings({ participant, mod, competencies, result }) {
   const answersText = mod.questions.map(q => {
-    const ans = (result?.answers?.[q.id] || "").trim();
+    const raw = (result?.answers?.questions || result?.answers || {})[q.id];
+    const ans = extractAnsText(raw).trim();
     const compName = (competencies.find(c => c.id === q.competency_id) || {}).name || "";
     return `[${compName}] Q: ${q.text_advanced || q.text}\nA: ${ans || "BLANK - no answer provided"}`;
   }).join("\n\n");
@@ -83,7 +90,8 @@ Rate each competency 1-5 (0 if blank/not attempted). Return valid JSON only - no
 
   // Enforce: blank answers must be 0
   mod.questions.forEach(q => {
-    const ans = (result?.answers?.[q.id] || "").trim();
+    const raw = (result?.answers?.questions || result?.answers || {})[q.id];
+    const ans = extractAnsText(raw).trim();
     if (!ans) {
       parsed.ratings[q.competency_id] = 0;
       if (!parsed.not_attempted) parsed.not_attempted = {};
@@ -113,8 +121,9 @@ function buildCompScores(compList, questions, scores, answers, part2Answers, lev
     const p2Score = p2s && !p2s.not_attempted && p2s.score ? p2s.score : null;
     const overall = p1Avg !== null && p2Score !== null ? (p1Avg + p2Score) / 2 : (p1Avg ?? p2Score ?? null);
     const qText = qs.map(q => {
-      const t = useAdv ? (q.text_advanced || q.text_standard) : (q.text_standard || q.text_advanced);
-      const a = ((answers?.questions || {})[q.id] || answers?.[q.id] || "Not attempted").substring(0, 300);
+      const t   = useAdv ? (q.text_advanced || q.text_standard) : (q.text_standard || q.text_advanced);
+      const raw = (answers?.questions || {})[q.id] || answers?.[q.id];
+      const a   = (extractAnsText(raw) || "Not attempted").substring(0, 300);
       return `Q: ${t}\nA: ${a}`;
     }).join("\n\n");
     const p1Notes = qs.map(q => scores.part1?.[q.id]?.notes).filter(Boolean).join(" ");

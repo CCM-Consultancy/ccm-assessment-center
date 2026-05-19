@@ -10,6 +10,7 @@ const FONTS = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
   *, *::before, *::after { box-sizing: border-box; }
   body { margin: 0; overflow: hidden; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
 `;
 
 const SANS  = "'Plus Jakarta Sans', Arial, sans-serif";
@@ -595,7 +596,164 @@ function Part1Screen({ moduleTitle, moduleIdx, moduleCount, questions, competenc
   const timerUrgent = timeLeft !== null && timeLeft < 300;
   const comp = (competencies || []).find(c => c.id === q?.competency_id);
 
+  // ── Recording state ────────────────────────────────────────────────────────
+  const [inputMode, setInputMode]             = useState("text");   // "text" | "audio"
+  const [recState, setRecState]               = useState("idle");   // "idle" | "requesting" | "recording" | "stopped"
+  const [transcript, setTranscript]           = useState("");
+  const [interimText, setInterimText]         = useState("");
+  const [additionalNotes, setAdditionalNotes] = useState("");
+  const [recSecs, setRecSecs]                 = useState(0);
+  const [audioUrl, setAudioUrl]               = useState(null);
+  const [micDenied, setMicDenied]             = useState(false);
+  const [noSpeechAPI, setNoSpeechAPI]         = useState(false);
+  const [unconfirmedWarn, setUnconfirmedWarn] = useState(false);
+  const [pendingNav, setPendingNav]           = useState(null);     // number | "submit"
+
+  const mrRef        = useRef(null);  // MediaRecorder
+  const chunksRef    = useRef([]);
+  const srRef        = useRef(null);  // SpeechRecognition
+  const timerRef     = useRef(null);
+  const finalTextRef = useRef("");    // accumulated final transcript segments
+  const sessionRef   = useRef(0);    // invalidates stale onstop callbacks
+
   function handlePaste(e) { e.preventDefault(); }
+
+  // Reset recording when navigating to a different question
+  useEffect(() => {
+    clearInterval(timerRef.current);
+    if (srRef.current) { try { srRef.current.stop(); } catch {} srRef.current = null; }
+    if (mrRef.current && mrRef.current.state !== "inactive") { try { mrRef.current.stop(); } catch {} }
+    sessionRef.current++;
+    setInputMode("text");
+    setRecState("idle");
+    setTranscript("");
+    setInterimText("");
+    setAdditionalNotes("");
+    setRecSecs(0);
+    setAudioUrl(null);
+    setMicDenied(false);
+    setNoSpeechAPI(false);
+    setUnconfirmedWarn(false);
+    setPendingNav(null);
+    finalTextRef.current = "";
+  }, [currentQIdx]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      clearInterval(timerRef.current);
+      sessionRef.current++;
+      if (srRef.current) { try { srRef.current.stop(); } catch {} }
+      if (mrRef.current && mrRef.current.state !== "inactive") { try { mrRef.current.stop(); } catch {} }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function doStopRecording() {
+    clearInterval(timerRef.current);
+    if (srRef.current) { try { srRef.current.stop(); } catch {} srRef.current = null; }
+    if (mrRef.current && mrRef.current.state !== "inactive") { try { mrRef.current.stop(); } catch {} }
+    setInterimText("");
+    setRecState("stopped");
+  }
+
+  async function startRecording() {
+    setRecState("requesting");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const session = sessionRef.current;
+
+      // MediaRecorder
+      chunksRef.current = [];
+      const mr = new MediaRecorder(stream);
+      mrRef.current = mr;
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        if (sessionRef.current !== session) { stream.getTracks().forEach(t => t.stop()); return; }
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        setAudioUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mr.start();
+
+      // SpeechRecognition
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SR) {
+        const rec = new SR();
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = "en-US";
+        finalTextRef.current = "";
+        rec.onresult = e => {
+          let interim = "";
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) finalTextRef.current += e.results[i][0].transcript + " ";
+            else interim += e.results[i][0].transcript;
+          }
+          setTranscript(finalTextRef.current);
+          setInterimText(interim);
+        };
+        rec.onerror = () => {};
+        try { rec.start(); srRef.current = rec; } catch {}
+      } else {
+        setNoSpeechAPI(true);
+      }
+
+      // Timer
+      const t0 = Date.now();
+      timerRef.current = setInterval(() => setRecSecs(Math.floor((Date.now() - t0) / 1000)), 500);
+
+      setRecState("recording");
+      setMicDenied(false);
+    } catch {
+      setMicDenied(true);
+      setInputMode("text");
+      setRecState("idle");
+    }
+  }
+
+  function confirmAnswer() {
+    const finalTranscript = transcript.trim();
+    setAnswers(prev => ({
+      ...prev,
+      [q.id]: {
+        type: "audio",
+        text: finalTranscript,
+        transcript: finalTranscript,
+        additional_notes: additionalNotes.trim(),
+        has_audio: true,
+      },
+    }));
+    setRecState("idle");
+  }
+
+  function tryNavigate(target) {
+    if (recState === "recording") {
+      alert("Please stop your recording before proceeding.");
+      return;
+    }
+    if (recState === "stopped") {
+      setPendingNav(target);
+      setUnconfirmedWarn(true);
+      return;
+    }
+    if (target === "submit") onShowSubmit();
+    else setCurrentQIdx(target);
+  }
+
+  function discardAndContinue() {
+    clearInterval(timerRef.current);
+    sessionRef.current++;
+    if (srRef.current) { try { srRef.current.stop(); } catch {} srRef.current = null; }
+    if (mrRef.current && mrRef.current.state !== "inactive") { try { mrRef.current.stop(); } catch {} }
+    setUnconfirmedWarn(false);
+    const target = pendingNav;
+    if (target === "submit") onShowSubmit();
+    else setCurrentQIdx(target);
+  }
+
+  // Derived: current question's saved answer
+  const curAns     = q ? answers[q.id] : undefined;
+  const curAnsText = typeof curAns === "string" ? curAns : (curAns?.text || "");
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflowY: "auto", background: "#f7f8fa" }}>
@@ -617,14 +775,14 @@ function Part1Screen({ moduleTitle, moduleIdx, moduleCount, questions, competenc
             Part 1: Behavioral Questions
           </span>
           {isLast && questions.length > 0 && (
-            <button onClick={onShowSubmit} style={btn(CCM_RED, "#fff", { fontSize: 12, padding: "6px 14px" })}>
+            <button onClick={() => tryNavigate("submit")} style={btn(CCM_RED, "#fff", { fontSize: 12, padding: "6px 14px" })}>
               {moduleType === "both" ? "Submit Part 1" : "Submit"}
             </button>
           )}
         </div>
       </div>
 
-      {/* Question body — centred, max-width container */}
+      {/* Question body */}
       <div style={{ flex: 1, maxWidth: 860, margin: "0 auto", width: "100%", padding: "2.5rem 2rem 3rem" }}>
         {questions.length === 0 ? (
           <div style={{ color: "#aaa", textAlign: "center", fontSize: 14 }}>No questions found for this module.</div>
@@ -632,12 +790,16 @@ function Part1Screen({ moduleTitle, moduleIdx, moduleCount, questions, competenc
           <>
             {/* Progress dots */}
             <div style={{ display: "flex", gap: 6, marginBottom: "1.75rem", flexWrap: "wrap" }}>
-              {questions.map((qu, i) => (
-                <div key={i} title={`Question ${i + 1}`}
-                  style={{ width: 10, height: 10, borderRadius: "50%", cursor: "pointer", background: i === currentQIdx ? CCM_RED : answers[questions[i]?.id] ? "#16a34a" : "#ddd", transition: "background 0.2s" }}
-                  onClick={() => setCurrentQIdx(i)}
-                />
-              ))}
+              {questions.map((qu, i) => {
+                const a = answers[qu.id];
+                const answered = a && (typeof a === "string" ? a.trim() : (a.text || a.transcript));
+                return (
+                  <div key={i} title={`Question ${i + 1}`}
+                    style={{ width: 10, height: 10, borderRadius: "50%", cursor: "pointer", background: i === currentQIdx ? CCM_RED : answered ? "#16a34a" : "#ddd", transition: "background 0.2s" }}
+                    onClick={() => tryNavigate(i)}
+                  />
+                );
+              })}
             </div>
 
             {/* Competency tag + question number */}
@@ -658,17 +820,199 @@ function Part1Screen({ moduleTitle, moduleIdx, moduleCount, questions, competenc
                   {q.text}
                 </p>
 
-                <textarea
-                  style={{ ...TEXTAREA, minHeight: 220 }}
-                  value={answers[q.id] || ""}
-                  onChange={e => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
-                  onPaste={handlePaste}
-                  placeholder="Type your response here… (copy and paste is disabled)"
-                />
+                {/* Mic denied banner */}
+                {micDenied && (
+                  <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", fontSize: 13, color: "#dc2626", marginBottom: "1rem" }}>
+                    Microphone access was denied. Please type your answer below.
+                  </div>
+                )}
 
+                {/* Mode toggle */}
+                <div style={{ display: "flex", gap: 8, marginBottom: "1rem" }}>
+                  <button
+                    onClick={() => setInputMode("text")}
+                    style={btn(inputMode === "text" ? CCM_RED : "#fff", inputMode === "text" ? "#fff" : "#555", { fontSize: 13, padding: "8px 18px" })}
+                  >
+                    ✏️ Type my answer
+                  </button>
+                  <button
+                    onClick={() => setInputMode("audio")}
+                    style={btn(inputMode === "audio" ? CCM_RED : "#fff", inputMode === "audio" ? "#fff" : "#555", { fontSize: 13, padding: "8px 18px" })}
+                  >
+                    🎤 Record my answer
+                  </button>
+                </div>
+
+                {/* ── TEXT MODE ─────────────────────────────────────────────── */}
+                {inputMode === "text" && (
+                  <textarea
+                    style={{ ...TEXTAREA, minHeight: 220 }}
+                    value={curAnsText}
+                    onChange={e => setAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                    onPaste={handlePaste}
+                    placeholder="Type your response here… (copy and paste is disabled)"
+                  />
+                )}
+
+                {/* ── AUDIO MODE ────────────────────────────────────────────── */}
+                {inputMode === "audio" && (
+                  <div style={{ border: "1px solid #e8e8e8", borderRadius: 12, padding: "1.5rem", background: "#fff" }}>
+
+                    {/* IDLE - no confirmed answer yet */}
+                    {recState === "idle" && curAns?.type !== "audio" && (
+                      <div style={{ textAlign: "center", padding: "1rem 0" }}>
+                        <button
+                          onClick={startRecording}
+                          style={btn(CCM_RED, "#fff", { fontSize: 15, padding: "12px 32px", borderRadius: 10 })}
+                        >
+                          🎤 Start Recording
+                        </button>
+                        <p style={{ fontSize: 12, color: "#aaa", marginTop: 10, marginBottom: 0 }}>
+                          Your speech will be transcribed automatically as you speak.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* IDLE - confirmed audio answer */}
+                    {recState === "idle" && curAns?.type === "audio" && (
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                          <span style={{ fontSize: 12, background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0", borderRadius: 6, padding: "2px 10px", fontWeight: 700 }}>
+                            Answer recorded
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 13, color: "#333", background: "#f8f9fb", border: "1px solid #e8e8e8", borderRadius: 8, padding: "12px 14px", lineHeight: 1.75, marginBottom: 8, whiteSpace: "pre-wrap" }}>
+                          {curAns.transcript || curAns.text || <span style={{ color: "#bbb", fontStyle: "italic" }}>No transcript captured.</span>}
+                        </div>
+                        {curAns.additional_notes && (
+                          <div style={{ fontSize: 12, color: "#555", marginBottom: 12 }}>
+                            <strong>Additional notes:</strong> {curAns.additional_notes}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => {
+                            setAnswers(prev => ({ ...prev, [q.id]: undefined }));
+                            setTranscript(""); setAudioUrl(null);
+                            finalTextRef.current = "";
+                          }}
+                          style={btn("#fff", "#555", { fontSize: 12 })}
+                        >
+                          🔄 Re-record
+                        </button>
+                      </div>
+                    )}
+
+                    {/* REQUESTING */}
+                    {recState === "requesting" && (
+                      <div style={{ textAlign: "center", padding: "1rem 0", color: "#666", fontSize: 13 }}>
+                        Requesting microphone access…
+                      </div>
+                    )}
+
+                    {/* RECORDING */}
+                    {recState === "recording" && (
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: "1rem", padding: "10px 16px", background: "#fef2f2", borderRadius: 10, border: "1px solid #fca5a5" }}>
+                          <div style={{ width: 14, height: 14, borderRadius: "50%", background: "#dc2626", animation: "pulse 1.2s ease-in-out infinite", flexShrink: 0 }} />
+                          <span style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 700, color: "#dc2626", letterSpacing: "0.04em" }}>
+                            Recording... {formatTime(recSecs)}
+                          </span>
+                          <button
+                            onClick={doStopRecording}
+                            style={btn("#dc2626", "#fff", { fontSize: 13, padding: "6px 18px", marginLeft: "auto" })}
+                          >
+                            ⏹ Stop
+                          </button>
+                        </div>
+
+                        {noSpeechAPI ? (
+                          <>
+                            <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "12px 14px", fontSize: 13, color: "#92400e", marginBottom: "1rem" }}>
+                              Live transcription is not available in this browser. Your audio will be saved but please also type a summary below.
+                            </div>
+                            <textarea
+                              style={{ ...TEXTAREA, minHeight: 100 }}
+                              value={transcript}
+                              onChange={e => { setTranscript(e.target.value); finalTextRef.current = e.target.value; }}
+                              onPaste={handlePaste}
+                              placeholder="Type a summary of your spoken answer here…"
+                            />
+                          </>
+                        ) : (
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: "#666", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                              Live transcript (auto-generated):
+                            </div>
+                            <div style={{ minHeight: 80, padding: "10px 14px", background: "#f8f9fb", border: "1px solid #e8e8e8", borderRadius: 8, fontSize: 13, lineHeight: 1.75 }}>
+                              {transcript
+                                ? <><span style={{ color: "#111" }}>{transcript}</span><span style={{ color: "#aaa" }}>{interimText}</span></>
+                                : <span style={{ color: "#bbb" }}>Your speech will appear here as you speak…{interimText && <span style={{ color: "#aaa" }}> {interimText}</span>}</span>
+                              }
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* STOPPED */}
+                    {recState === "stopped" && (
+                      <div>
+                        <div style={{ marginBottom: "1rem" }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#666", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                            Play back your answer
+                          </div>
+                          {audioUrl
+                            ? <audio src={audioUrl} controls style={{ width: "100%", borderRadius: 8 }} />
+                            : <div style={{ fontSize: 12, color: "#aaa" }}>Audio playback unavailable.</div>
+                          }
+                        </div>
+
+                        <div style={{ marginBottom: "1rem" }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#666", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                            Your transcript:
+                          </div>
+                          <div style={{ padding: "10px 14px", background: "#f8f9fb", border: "1px solid #e8e8e8", borderRadius: 8, fontSize: 13, lineHeight: 1.75, color: "#333", whiteSpace: "pre-wrap", minHeight: 60 }}>
+                            {transcript || <span style={{ color: "#bbb", fontStyle: "italic" }}>No transcript captured.</span>}
+                          </div>
+                        </div>
+
+                        <div style={{ marginBottom: "1rem" }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: "#666", marginBottom: 6 }}>
+                            Add any additional notes (optional):
+                          </div>
+                          <textarea
+                            style={{ ...TEXTAREA, minHeight: 80 }}
+                            value={additionalNotes}
+                            onChange={e => setAdditionalNotes(e.target.value)}
+                            onPaste={handlePaste}
+                            placeholder="Any points you want to add to your recorded response…"
+                          />
+                        </div>
+
+                        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                          <button
+                            onClick={() => {
+                              setRecState("idle");
+                              setTranscript(""); setInterimText(""); setAudioUrl(null);
+                              setAdditionalNotes(""); finalTextRef.current = "";
+                            }}
+                            style={btn("#fff", "#555", { fontSize: 13 })}
+                          >
+                            🔄 Re-record
+                          </button>
+                          <button onClick={confirmAnswer} style={btn(CCM_RED, "#fff", { fontSize: 13 })}>
+                            Use this answer →
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Navigation */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1.5rem", gap: 12 }}>
                   <button
-                    onClick={() => setCurrentQIdx(i => Math.max(0, i - 1))}
+                    onClick={() => tryNavigate(Math.max(0, currentQIdx - 1))}
                     disabled={currentQIdx === 0}
                     style={btn("#fff", "#444", { opacity: currentQIdx === 0 ? 0.35 : 1, cursor: currentQIdx === 0 ? "default" : "pointer" })}
                   >
@@ -676,12 +1020,12 @@ function Part1Screen({ moduleTitle, moduleIdx, moduleCount, questions, competenc
                   </button>
                   <div style={{ display: "flex", gap: 10 }}>
                     {!isLast && (
-                      <button onClick={() => setCurrentQIdx(i => Math.min(questions.length - 1, i + 1))} style={btn(CCM_RED, "#fff")}>
+                      <button onClick={() => tryNavigate(Math.min(questions.length - 1, currentQIdx + 1))} style={btn(CCM_RED, "#fff")}>
                         Next →
                       </button>
                     )}
                     {isLast && (
-                      <button onClick={onShowSubmit} style={btn(CCM_RED, "#fff")}>
+                      <button onClick={() => tryNavigate("submit")} style={btn(CCM_RED, "#fff")}>
                         {moduleType === "both" ? "Submit Part 1" : "Submit Assessment"}
                       </button>
                     )}
@@ -692,6 +1036,26 @@ function Part1Screen({ moduleTitle, moduleIdx, moduleCount, questions, competenc
           </>
         )}
       </div>
+
+      {/* Unconfirmed recording warning */}
+      {unconfirmedWarn && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: "2rem", maxWidth: 420, width: "90%", boxShadow: "0 8px 40px rgba(0,0,0,.2)" }}>
+            <h3 style={{ fontFamily: SERIF, margin: "0 0 0.75rem", fontSize: 20 }}>Unconfirmed recording</h3>
+            <p style={{ fontSize: 14, color: "#555", lineHeight: 1.7, marginBottom: "1.5rem" }}>
+              You have an unconfirmed recording. Do you want to discard it and move on?
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={() => setUnconfirmedWarn(false)} style={btn("#fff", "#555", { fontSize: 13 })}>
+                Stay and confirm
+              </button>
+              <button onClick={discardAndContinue} style={btn(CCM_RED, "#fff", { fontSize: 13 })}>
+                Discard and continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
