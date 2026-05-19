@@ -527,8 +527,8 @@ function BreakScreen({ breakDurationSecs, participant, tabSwitches, showTabWarni
 
           <div style={{ marginTop: "1rem", textAlign: "center" }}>
             <button
-              onClick={onSkip}
-              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "#aaa", textDecoration: "underline", fontFamily: SANS, padding: 0 }}
+              onClick={e => { e.stopPropagation(); onSkip(); }}
+              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, color: "#aaa", textDecoration: "underline", fontFamily: SANS, padding: "12px 20px", minHeight: 44, display: "inline-block", lineHeight: 1 }}
             >
               Skip break and proceed to Part 2 →
             </button>
@@ -1844,8 +1844,11 @@ export default function ParticipantApp() {
   }
 
   function beginPart2() {
-    const taskMins    = getTaskMins(currentModule, session?.level);
-    const readingSecs = (currentModule?.reading_time_mins || 5) * 60;
+    const taskMins      = getTaskMins(currentModule, session?.level);
+    const fullReadingSecs = (currentModule?.reading_time_mins || 5) * 60;
+    const skipReading   = new URLSearchParams(window.location.search).get("skipReading") === "true";
+    const isAdmin       = participant?.username === "admin";
+    const readingSecs   = (skipReading && isAdmin) ? 5 : fullReadingSecs;
     moduleDurationRef.current  = taskMins * 60;
     readingDurationRef.current = readingSecs;
     part2TabSwitches.current   = 0;
