@@ -700,6 +700,37 @@ function Part1Screen({ moduleTitle, moduleIdx, moduleCount, questions, competenc
 function ScenarioPanel({ scenario, moduleTitle, moduleIdx, moduleCount, assessPhase, readingTimeLeft }) {
   const readingDone = readingTimeLeft <= 0;
 
+  function handlePrint() {
+    const win = window.open("", "_blank");
+    if (!win) { alert("Please allow popups to print the case study."); return; }
+    function esc(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    const caseHtml   = esc(scenario?.case_study_text || "").replace(/\n/g, "<br>");
+    const appendHtml = scenario?.appendix_text
+      ? `<div class="section"><h2>Appendix</h2><div class="body-text">${esc(scenario.appendix_text).replace(/\n/g, "<br>")}</div></div>`
+      : "";
+    const imagesHtml = [1, 2, 3].map(n => {
+      const url = scenario?.[`image_${n}_url`];
+      const cap = scenario?.[`image_${n}_caption`];
+      return url ? `<div class="img-wrap"><img src="${url}" alt="${esc(cap)}"/>${cap ? `<p class="caption">${esc(cap)}</p>` : ""}</div>` : "";
+    }).join("");
+    win.document.write(`<!DOCTYPE html><html><head><title>${esc(moduleTitle)} — Case Study</title><style>
+      body{font-family:Georgia,serif;padding:40px;color:#111;max-width:800px;margin:0 auto;font-size:13px}
+      h1{font-size:22px;margin-bottom:4px}h2{font-size:16px;color:#444;margin:24px 0 10px;border-bottom:1px solid #eee;padding-bottom:6px}
+      .body-text{line-height:1.85;white-space:pre-wrap}.section{margin-top:24px}
+      .img-wrap{margin:16px 0}img{max-width:100%;border:1px solid #ddd;border-radius:4px}
+      .caption{font-size:11px;color:#888;text-align:center;font-style:italic;margin-top:6px}
+      .footer{margin-top:40px;padding-top:10px;border-top:1px solid #eee;font-size:10px;color:#aaa;text-align:right}
+      @page{margin:2cm;size:A4 portrait}
+    </style></head><body>
+      <h1>${esc(moduleTitle)}</h1><h2>Case Study</h2>
+      <div class="body-text">${caseHtml}</div>
+      ${appendHtml}${imagesHtml}
+      <div class="footer">CCM Confidential</div>
+      <script>window.onload=function(){window.print()};window.onafterprint=function(){window.close()}</script>
+    </body></html>`);
+    win.document.close();
+  }
+
   if (!scenario?.case_study_text && assessPhase !== "presentation") {
     return (
       <div style={{ padding: "3rem 2rem", color: "#bbb", fontSize: 14, textAlign: "center" }}>
@@ -710,7 +741,7 @@ function ScenarioPanel({ scenario, moduleTitle, moduleIdx, moduleCount, assessPh
 
   return (
     <div>
-      {/* Reading timer banner — sticky at the top of the left panel */}
+      {/* Reading timer banner + print button — sticky at the top of the left panel */}
       <div style={{
         position: "sticky",
         top: 0,
@@ -720,24 +751,33 @@ function ScenarioPanel({ scenario, moduleTitle, moduleIdx, moduleCount, assessPh
         borderBottom: `1px solid ${readingDone ? "#86efac" : "#fde68a"}`,
         display: "flex",
         alignItems: "center",
+        justifyContent: "space-between",
         gap: 10,
       }}>
-        {readingDone ? (
-          <>
-            <span style={{ fontSize: 15 }}>✓</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#16a34a" }}>
-              Reading time complete. You may now answer.
-            </span>
-          </>
-        ) : (
-          <>
-            <span style={{ fontSize: 15 }}>📖</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#92400e" }}>
-              Please read the case study. Time remaining:{" "}
-              <span style={{ fontFamily: "monospace", fontSize: 14 }}>{formatTime(readingTimeLeft)}</span>
-            </span>
-          </>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {readingDone ? (
+            <>
+              <span style={{ fontSize: 15 }}>✓</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#16a34a" }}>
+                Reading time complete. You may now answer.
+              </span>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: 15 }}>📖</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#92400e" }}>
+                Please read the case study. Time remaining:{" "}
+                <span style={{ fontFamily: "monospace", fontSize: 14 }}>{formatTime(readingTimeLeft)}</span>
+              </span>
+            </>
+          )}
+        </div>
+        <button
+          onClick={handlePrint}
+          style={{ background: "#fff", border: "1px solid #ddd", borderRadius: 6, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: SANS, color: "#555", flexShrink: 0 }}
+        >
+          🖨 Print Case Study
+        </button>
       </div>
 
       <div style={{ padding: "2rem" }}>
@@ -1038,6 +1078,133 @@ function Part2Panel({ answer, setAnswer, fileUrl, uploading, onUpload, onSubmit,
   );
 }
 
+// ─── Presentation Prep Panel (right panel — preparation phase) ───────────────
+function PresentationPrepPanel({ taskBrief, timeLeft, totalPrepSecs, onReadyToPresent }) {
+  const timerUrgent = timeLeft !== null && timeLeft < 300;
+  const prepElapsed = Math.max(0, totalPrepSecs - (timeLeft || 0));
+  const canPresent  = prepElapsed >= totalPrepSecs * 0.5;
+  const halfMins    = Math.ceil((totalPrepSecs * 0.5) / 60);
+
+  return (
+    <div style={{ padding: "1.75rem 2rem 2.5rem" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: CCM_RED, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>
+        Preparation Time
+      </div>
+
+      {taskBrief && (
+        <div style={{ marginBottom: "1.75rem" }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+            Your Tasks
+          </div>
+          <div style={{ fontSize: 14, color: "#333", lineHeight: 1.8, whiteSpace: "pre-wrap", padding: "14px 16px", background: "#f8f9fb", borderRadius: 10, border: "1px solid #e8e8e8" }}>
+            {taskBrief}
+          </div>
+        </div>
+      )}
+
+      <div style={{ textAlign: "center", margin: "1.5rem 0 1.75rem" }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+          Time Remaining
+        </div>
+        <div style={{ fontFamily: "monospace", fontSize: 64, fontWeight: 700, letterSpacing: "0.04em", color: timerUrgent ? "#dc2626" : "#111", lineHeight: 1 }}>
+          {formatTime(timeLeft)}
+        </div>
+      </div>
+
+      <div style={{ background: "#f8f9fb", borderRadius: 10, border: "1px solid #e8e8e8", padding: "14px 16px", marginBottom: "1.75rem" }}>
+        <p style={{ margin: "0 0 8px", fontSize: 14, color: "#333", lineHeight: 1.75 }}>
+          Work on your presentation using PowerPoint, Word, or any tool you prefer. You may minimize this window while you work. Return here when you are ready to present or when time runs out.
+        </p>
+        <p style={{ margin: 0, fontSize: 12, color: "#999" }}>
+          Tab switching monitoring is paused during preparation time.
+        </p>
+      </div>
+
+      <button
+        onClick={onReadyToPresent}
+        disabled={!canPresent}
+        style={btn(canPresent ? CCM_RED : "#ccc", "#fff", { width: "100%", cursor: canPresent ? "pointer" : "not-allowed", fontSize: 15, padding: "13px 22px" })}
+      >
+        I'm Ready to Present →
+      </button>
+      {!canPresent && (
+        <p style={{ textAlign: "center", fontSize: 12, color: "#aaa", marginTop: 8, marginBottom: 0 }}>
+          Available after {halfMins} minute{halfMins !== 1 ? "s" : ""} of preparation
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── Presentation Declaration Screen ─────────────────────────────────────────
+function PresentationDeclarationScreen({ participant, confirmed, setConfirmed, onConfirm, submitting, onSignOut }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: SANS, background: "#f7f8fa" }}>
+      <style>{FONTS}</style>
+      <header style={{ height: HEADER_H, background: "#fff", borderBottom: "1px solid #e8e8e8", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 1.5rem", flexShrink: 0, boxShadow: "0 1px 6px rgba(0,0,0,.05)" }}>
+        <CCMLogo />
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 13, color: "#666" }}>{participant?.name || participant?.username}</span>
+          <button onClick={onSignOut} style={btn("#fff", "#555", { fontSize: 12, padding: "6px 14px" })}>Sign out</button>
+        </div>
+      </header>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
+        <div style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 16, padding: "2.5rem", maxWidth: 540, width: "100%", boxShadow: "0 4px 24px rgba(0,0,0,.06)", textAlign: "center" }}>
+          <CCMLogo scale={1.1} />
+          <h2 style={{ fontFamily: SERIF, fontSize: 26, margin: "1.5rem 0 0.75rem", color: "#111" }}>Preparation Complete</h2>
+          <p style={{ fontSize: 14, color: "#555", lineHeight: 1.75, margin: "0 0 2rem" }}>
+            Your preparation time for the Case Study exercise is now complete.
+          </p>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer", marginBottom: "1.75rem", padding: "14px 16px", background: confirmed ? "#fff7f7" : "#f8f9fb", borderRadius: 10, border: `1px solid ${confirmed ? CCM_RED + "44" : "#eee"}`, transition: "all 0.2s", textAlign: "left" }}>
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={e => setConfirmed(e.target.checked)}
+              style={{ width: 18, height: 18, marginTop: 1, accentColor: CCM_RED, flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 14, color: "#333", lineHeight: 1.6 }}>
+              I confirm that I completed my presentation preparation within the allotted time and did not continue working after the timer ended.
+            </span>
+          </label>
+          <button
+            onClick={onConfirm}
+            disabled={!confirmed || submitting}
+            style={btn(confirmed ? CCM_RED : "#ccc", "#fff", { width: "100%", cursor: confirmed ? "pointer" : "not-allowed", fontSize: 15, padding: "13px 22px", opacity: submitting ? 0.6 : 1 })}
+          >
+            {submitting ? "Saving…" : "Confirm and Proceed →"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Presentation Waiting Screen ──────────────────────────────────────────────
+function PresentationWaitingScreen({ participant }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", fontFamily: SANS, background: "#f7f8fa" }}>
+      <style>{FONTS}</style>
+      <header style={{ height: HEADER_H, background: "#fff", borderBottom: "1px solid #e8e8e8", display: "flex", alignItems: "center", padding: "0 1.5rem", flexShrink: 0, boxShadow: "0 1px 6px rgba(0,0,0,.05)" }}>
+        <CCMLogo />
+        <span style={{ marginLeft: "auto", fontSize: 13, color: "#666" }}>{participant?.name || participant?.username}</span>
+      </header>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
+        <div style={{ background: "#fff", border: "1px solid #e8e8e8", borderRadius: 20, padding: "3rem 2.5rem", maxWidth: 540, width: "100%", boxShadow: "0 4px 32px rgba(0,0,0,.07)", textAlign: "center" }}>
+          <CCMLogo scale={1.1} />
+          <div style={{ fontSize: 48, margin: "1.5rem 0 1rem" }}>🎤</div>
+          <h2 style={{ fontFamily: SERIF, fontSize: 28, margin: "0 0 1rem", color: "#111" }}>You're Ready to Present</h2>
+          <p style={{ fontSize: 15, color: "#444", lineHeight: 1.75, margin: "0 0 1.25rem" }}>
+            Your assessor will now invite you to share your presentation. Please have your presentation open and ready to share via Zoom, Microsoft Teams, or in-person as instructed.
+          </p>
+          <p style={{ fontSize: 13, color: "#aaa", margin: 0, lineHeight: 1.6 }}>
+            Do not close this window until your assessor confirms your session is complete.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Participant App ──────────────────────────────────────────────────────
 export default function ParticipantApp() {
   const [screen, setScreen] = useState("landing");
@@ -1061,6 +1228,12 @@ export default function ParticipantApp() {
   const [part2Answer, setPart2Answer]       = useState("");
   const [part2FileUrl, setPart2FileUrl]     = useState(null);
   const [part2Uploading, setPart2Uploading] = useState(false);
+
+  // Presentation sub-phase (only active when part2_mode === "presentation")
+  // values: "reading" | "prep" | "declaration" | "waiting"
+  const [presentationPhase, setPresentationPhase] = useState("reading");
+  const [declarationConfirmed, setDeclarationConfirmed] = useState(false);
+  const prepStartRef = useRef(null);
 
   // Anti-cheat
   const tabSwitchesRef   = useRef(0);
@@ -1150,11 +1323,13 @@ export default function ParticipantApp() {
     document.body.style.userSelect = "none";
   }
 
-  // ── Tab switch detection — active in both Part 1 and Part 2 ──────────────────
+  // ── Tab switch detection — paused during presentation preparation ─────────────
   useEffect(() => {
     if (screen !== "assessment") return;
     const onVis = () => {
       if (document.visibilityState === "hidden") return;
+      // Pause monitoring while participant prepares their presentation externally
+      if (assessPhase === "part2" && currentModule?.part2_mode === "presentation" && presentationPhase === "prep") return;
       tabSwitchesRef.current += 1;
       if (assessPhase === "part2") part2TabSwitches.current += 1;
       else if (assessPhase === "break") breakTabSwitches.current += 1;
@@ -1164,7 +1339,7 @@ export default function ParticipantApp() {
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
-  }, [screen, assessPhase]);
+  }, [screen, assessPhase, currentModule, presentationPhase]);
 
   // ── Unified timer — one interval, both countdowns derived from shared timestamp ─
   useEffect(() => {
@@ -1179,6 +1354,33 @@ export default function ParticipantApp() {
     }, 1000);
     return () => clearInterval(interval);
   }, [timerActive]);
+
+  // ── Presentation: reading time ends → enter preparation phase ────────────────
+  useEffect(() => {
+    if (
+      assessPhase === "part2" &&
+      currentModule?.part2_mode === "presentation" &&
+      presentationPhase === "reading" &&
+      readingTimeLeft === 0 &&
+      timerActive
+    ) {
+      setPresentationPhase("prep");
+      prepStartRef.current = Date.now();
+    }
+  }, [assessPhase, currentModule, presentationPhase, readingTimeLeft, timerActive]);
+
+  // ── Presentation: prep timer expires → auto-enter declaration screen ──────────
+  useEffect(() => {
+    if (
+      assessPhase === "part2" &&
+      currentModule?.part2_mode === "presentation" &&
+      presentationPhase === "prep" &&
+      timeLeft !== null &&
+      timeLeft === 0
+    ) {
+      setPresentationPhase("declaration");
+    }
+  }, [assessPhase, currentModule, presentationPhase, timeLeft]);
 
   function startModuleTimer(mod) {
     const minutes = mod?.time_limit || 60;
@@ -1251,6 +1453,9 @@ export default function ParticipantApp() {
     part2TabSwitches.current = 0;
     breakTabSwitches.current = 0;
     breakStartRef.current    = null;
+    prepStartRef.current     = null;
+    setPresentationPhase("reading");
+    setDeclarationConfirmed(false);
     setTabSwitches(0);
     setCompletionTimeSec(0);
   }
@@ -1283,6 +1488,9 @@ export default function ParticipantApp() {
     setTimeLeft(taskMins * 60);
     setReadingTimeLeft(readingSecs);
     setTimerActive(true);
+    setPresentationPhase("reading");
+    setDeclarationConfirmed(false);
+    prepStartRef.current = null;
     setAssessPhase("part2");
   }
 
@@ -1304,6 +1512,30 @@ export default function ParticipantApp() {
       tab_switches_during_break: breakTabSwitches.current,
     });
     setAssessPhase("part2Transition");
+  }
+
+  async function confirmPresentationDeclaration() {
+    if (!declarationConfirmed || submitting) return;
+    setSubmitting(true);
+    const prepTimeUsed = prepStartRef.current
+      ? Math.round((Date.now() - prepStartRef.current) / 1000)
+      : 0;
+    const timeSpent = Math.round((Date.now() - (startTimeRef.current || Date.now())) / 1000);
+    setCompletionTimeSec(prev => prev + timeSpent);
+    try {
+      await db.savePart2Result(participant.id, currentModule.id, {
+        mode:                  "presentation",
+        preparation_time_used: prepTimeUsed,
+        declaration_confirmed: true,
+        ready_at:              new Date().toISOString(),
+        tab_switches_part2:    part2TabSwitches.current,
+      });
+      setTimerActive(false);
+      setPresentationPhase("waiting");
+    } catch (err) {
+      alert(`Submission failed: ${err.message}. Please try again.`);
+    }
+    setSubmitting(false);
   }
 
   async function handlePart2Upload(file) {
@@ -1331,6 +1563,9 @@ export default function ParticipantApp() {
       setUploadedFileUrl(null);
       setPart2Answer("");
       setPart2FileUrl(null);
+      setPresentationPhase("reading");
+      setDeclarationConfirmed(false);
+      prepStartRef.current = null;
       const mt = nextMod?.module_type || "questions";
       setAssessPhase(mt === "presentation" ? "presentation" : "questions");
       startModuleTimer(nextMod);
@@ -1437,6 +1672,25 @@ export default function ParticipantApp() {
     );
   }
 
+  // ── Presentation declaration screen ──────────────────────────────────────────
+  if (assessPhase === "part2" && currentModule?.part2_mode === "presentation" && presentationPhase === "declaration") {
+    return (
+      <PresentationDeclarationScreen
+        participant={participant}
+        confirmed={declarationConfirmed}
+        setConfirmed={setDeclarationConfirmed}
+        onConfirm={confirmPresentationDeclaration}
+        submitting={submitting}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  // ── Presentation waiting screen ───────────────────────────────────────────────
+  if (assessPhase === "part2" && currentModule?.part2_mode === "presentation" && presentationPhase === "waiting") {
+    return <PresentationWaitingScreen participant={participant} />;
+  }
+
   // ── Assessment screen ─────────────────────────────────────────────────────────
   const mt          = currentModule?.module_type || "questions";
   const questions   = currentModule?.questions   || [];
@@ -1539,13 +1793,16 @@ export default function ParticipantApp() {
                   {assessPhase === "presentation" ? "Presentation Task" : "Part 2 — Case Study"}
                 </span>
               </div>
-              <button onClick={() => setShowSubmitModal(true)} style={btn(CCM_RED, "#fff", { fontSize: 12, padding: "6px 14px" })}>
-                Submit
-              </button>
+              {/* Hide submit button in live presentation mode — "I'm Ready" button is in the panel */}
+              {!(assessPhase === "part2" && currentModule?.part2_mode === "presentation") && (
+                <button onClick={() => setShowSubmitModal(true)} style={btn(CCM_RED, "#fff", { fontSize: 12, padding: "6px 14px" })}>
+                  Submit
+                </button>
+              )}
             </div>
 
-            {/* Part 2 content */}
-            {assessPhase === "part2" && (
+            {/* Part 2 — written submission */}
+            {assessPhase === "part2" && (!currentModule?.part2_mode || currentModule.part2_mode === "written") && (
               <Part2Panel
                 answer={part2Answer}
                 setAnswer={setPart2Answer}
@@ -1558,7 +1815,33 @@ export default function ParticipantApp() {
               />
             )}
 
-            {/* Presentation content */}
+            {/* Part 2 — live presentation: reading phase */}
+            {assessPhase === "part2" && currentModule?.part2_mode === "presentation" && presentationPhase === "reading" && (
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "3rem 2rem", textAlign: "center" }}>
+                <div style={{ fontSize: 40, marginBottom: "1rem" }}>📖</div>
+                <h3 style={{ fontFamily: SERIF, fontSize: 20, color: "#111", margin: "0 0 0.75rem" }}>Read the Case Study</h3>
+                <p style={{ fontSize: 14, color: "#555", lineHeight: 1.75, maxWidth: 380, margin: 0 }}>
+                  Read the case study carefully. Your preparation time will begin after the reading period ends.
+                </p>
+              </div>
+            )}
+
+            {/* Part 2 — live presentation: preparation phase */}
+            {assessPhase === "part2" && currentModule?.part2_mode === "presentation" && presentationPhase === "prep" && (() => {
+              const tMins       = getTaskMins(currentModule, session?.level);
+              const rSecs       = (currentModule?.reading_time_mins || 5) * 60;
+              const totalPrep   = Math.max(60, tMins * 60 - rSecs);
+              return (
+                <PresentationPrepPanel
+                  taskBrief={currentModule?.task_brief || ""}
+                  timeLeft={timeLeft}
+                  totalPrepSecs={totalPrep}
+                  onReadyToPresent={() => setPresentationPhase("declaration")}
+                />
+              );
+            })()}
+
+            {/* Presentation content (standalone module_type=presentation, old flow) */}
             {assessPhase === "presentation" && (
               <PresentationPanel
                 presentationAnswers={presentationAnswers}

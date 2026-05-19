@@ -78,7 +78,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const emptyScenForm = { case_study_text:"", appendix_text:"", image_1_url:"", image_1_caption:"", image_2_url:"", image_2_caption:"", image_3_url:"", image_3_caption:"", file_url:"", file_name:"", file_type:"" };
   const [mbScenForm,     setMbScenForm]     = useState({ ...emptyScenForm });
   const [mbLevelIds,     setMbLevelIds]     = useState([]);
-  const emptyTimeForm = { reading_time_mins:5, break_duration_mins:10, sup_q_mins:45, sup_task_mins:30, mgr_q_mins:60, mgr_task_mins:45, dir_q_mins:75, dir_task_mins:60 };
+  const emptyTimeForm = { reading_time_mins:5, break_duration_mins:10, part2_mode:"written", sup_q_mins:45, sup_task_mins:30, mgr_q_mins:60, mgr_task_mins:45, dir_q_mins:75, dir_task_mins:60 };
   const [mbTimeForm,     setMbTimeForm]     = useState({ ...emptyTimeForm });
   const [mbTimeSaving,   setMbTimeSaving]   = useState(false);
   const [mbLoading,      setMbLoading]      = useState(false);
@@ -480,9 +480,10 @@ const [editCompSaving, setEditCompSaving] = useState(false);
     const mod = mbModules.find(m => m.id === moduleId);
     setMbModForm({ name: mod?.title || "", module_type: mod?.module_type || "questions", task_brief: mod?.task_brief || "", ac_intro_text: mod?.ac_intro_text || "" });
     setMbTimeForm({
-      reading_time_mins:  mod?.reading_time_mins  ?? 5,
-      break_duration_mins: mod?.break_duration_mins ?? 10,
-      sup_q_mins:          mod?.sup_q_mins          ?? 45,
+      reading_time_mins:   mod?.reading_time_mins   ?? 5,
+      break_duration_mins: mod?.break_duration_mins  ?? 10,
+      part2_mode:          mod?.part2_mode           ?? "written",
+      sup_q_mins:          mod?.sup_q_mins           ?? 45,
       sup_task_mins:     mod?.sup_task_mins      ?? 30,
       mgr_q_mins:        mod?.mgr_q_mins         ?? 60,
       mgr_task_mins:     mod?.mgr_task_mins      ?? 45,
@@ -1590,6 +1591,17 @@ ${compsHtml}
                     <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:16 }}>
                       All values in minutes. Set per-level time limits for questions and tasks.
                     </p>
+                    <div style={{ marginBottom:16 }}>
+                      <label style={S.label}>Part 2 Delivery Mode</label>
+                      <select
+                        style={{ ...S.input, width:220 }}
+                        value={mbTimeForm.part2_mode || "written"}
+                        onChange={e => setMbTimeForm(f => ({ ...f, part2_mode: e.target.value }))}
+                      >
+                        <option value="written">Written Submission</option>
+                        <option value="presentation">Live Presentation</option>
+                      </select>
+                    </div>
                     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px 24px" }}>
                       {[
                         { key:"reading_time_mins",   label:"Reading time (all levels)" },
