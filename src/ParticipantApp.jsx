@@ -192,13 +192,13 @@ function SystemCheckScreen({ onContinue }) {
     {
       status: isChrome ? "ok" : "warn",
       label:  isChrome
-        ? "You are using Google Chrome — recommended"
+        ? "You are using Google Chrome - recommended"
         : "You are not using Google Chrome. Please switch to Google Chrome before continuing. Other browsers may not support all assessment features.",
     },
     {
       status: !isMobileDevice ? "ok" : "fail",
       label:  !isMobileDevice
-        ? "You are using a desktop or laptop — required"
+        ? "You are using a desktop or laptop - required"
         : "Mobile and tablet devices are not permitted. Please use a desktop or laptop computer.",
     },
     {
@@ -227,7 +227,7 @@ function SystemCheckScreen({ onContinue }) {
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
           <CCMLogo scale={1.1} />
           <h2 style={{ fontFamily: SERIF, fontSize: 24, margin: "1.25rem 0 0.4rem", color: "#111" }}>
-            Before You Begin — System Check
+            Before You Begin: System Check
           </h2>
           <p style={{ fontSize: 14, color: "#666", margin: 0 }}>
             Please confirm your setup meets the required standards.
@@ -311,7 +311,7 @@ function WelcomeScreen({ session, participant, onBegin }) {
         </h2>
         <p style={{ fontSize: 14, color: "#888", margin: "0 0 1.75rem" }}>
           {firstModule?.title || "Assessment Module"}
-          {cohort?.name ? ` — ${cohort.name}` : ""}
+          {cohort?.name ? ` - ${cohort.name}` : ""}
         </p>
 
         {/* Section 1 — About This Assessment */}
@@ -329,9 +329,9 @@ function WelcomeScreen({ session, participant, onBegin }) {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {[
-              { label: "Part 1 — Behavioral Interview", time: qMins, detail: `You will be asked ${numQuestions > 0 ? numQuestions : "a series of"} question${numQuestions !== 1 ? "s" : ""} about your professional experience. Answer by typing your response.` },
+              { label: "Part 1: Behavioral Interview", time: qMins, detail: `You will be asked ${numQuestions > 0 ? numQuestions : "a series of"} question${numQuestions !== 1 ? "s" : ""} about your professional experience. Answer by typing your response.` },
               { label: "Break", time: breakMins, detail: "A short break between the two parts." },
-              { label: "Part 2 — Case Study", time: taskMins, detail: "You will read a business case and complete a series of tasks." },
+              { label: "Part 2: Case Study", time: taskMins, detail: "You will read a business case and complete a series of tasks." },
             ].map((row, i) => (
               <div key={i} style={{ display: "flex", gap: 14, padding: "12px 16px", background: "#f8f9fb", borderRadius: 10, border: "1px solid #eee" }}>
                 <div style={{ minWidth: 52, flexShrink: 0, fontFamily: "monospace", fontSize: 15, fontWeight: 700, color: CCM_RED, paddingTop: 1 }}>
@@ -614,7 +614,7 @@ function Part1Screen({ moduleTitle, moduleIdx, moduleCount, questions, competenc
             </div>
           )}
           <span style={{ fontSize: 12, color: "#aaa", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            Part 1 — Behavioral Questions
+            Part 1: Behavioral Questions
           </span>
           {isLast && questions.length > 0 && (
             <button onClick={onShowSubmit} style={btn(CCM_RED, "#fff", { fontSize: 12, padding: "6px 14px" })}>
@@ -713,7 +713,7 @@ function ScenarioPanel({ scenario, moduleTitle, moduleIdx, moduleCount, assessPh
       const cap = scenario?.[`image_${n}_caption`];
       return url ? `<div class="img-wrap"><img src="${url}" alt="${esc(cap)}"/>${cap ? `<p class="caption">${esc(cap)}</p>` : ""}</div>` : "";
     }).join("");
-    win.document.write(`<!DOCTYPE html><html><head><title>${esc(moduleTitle)} — Case Study</title><style>
+    win.document.write(`<!DOCTYPE html><html><head><title>${esc(moduleTitle)}: Case Study</title><style>
       body{font-family:Georgia,serif;padding:40px;color:#111;max-width:800px;margin:0 auto;font-size:13px}
       h1{font-size:22px;margin-bottom:4px}h2{font-size:16px;color:#444;margin:24px 0 10px;border-bottom:1px solid #eee;padding-bottom:6px}
       .body-text{line-height:1.85;white-space:pre-wrap}.section{margin-top:24px}
@@ -941,7 +941,7 @@ function PresentationPanel({ presentationAnswers, setPresentationAnswers, upload
       {/* Download template */}
       <div style={{ marginBottom: "1.75rem" }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
-          Step 1 — Download Template
+          Step 1: Download Template
         </div>
         <a
           href="#ppt-template"
@@ -955,7 +955,7 @@ function PresentationPanel({ presentationAnswers, setPresentationAnswers, upload
       {/* Reflection questions */}
       <div style={{ marginBottom: "1.75rem" }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>
-          Step 2 — Reflection Questions
+          Step 2: Reflection Questions
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           {REFLECTION_QUESTIONS.map((question, i) => (
@@ -978,7 +978,7 @@ function PresentationPanel({ presentationAnswers, setPresentationAnswers, upload
       {/* Upload */}
       <div style={{ marginBottom: "1.75rem" }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#888", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
-          Step 3 — Upload Presentation
+          Step 3: Upload Presentation
         </div>
         <input
           ref={fileInputRef}
@@ -1795,7 +1795,7 @@ export default function ParticipantApp() {
                   </div>
                 )}
                 <span style={{ fontSize: 12, color: "#aaa", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                  {assessPhase === "presentation" ? "Presentation Task" : "Part 2 — Case Study"}
+                  {assessPhase === "presentation" ? "Presentation Task" : "Part 2: Case Study"}
                 </span>
               </div>
               {/* Hide submit button in live presentation mode — "I'm Ready" button is in the panel */}

@@ -32,7 +32,7 @@ export async function generateAIRatings({ participant, mod, competencies, result
   const answersText = mod.questions.map(q => {
     const ans = (result?.answers?.[q.id] || "").trim();
     const compName = (competencies.find(c => c.id === q.competency_id) || {}).name || "";
-    return `[${compName}] Q: ${q.text_advanced || q.text}\nA: ${ans || "BLANK — no answer provided"}`;
+    return `[${compName}] Q: ${q.text_advanced || q.text}\nA: ${ans || "BLANK - no answer provided"}`;
   }).join("\n\n");
 
   const transcriptText = ((result?.sim_messages) || [])
@@ -60,7 +60,7 @@ ${transcriptText || "No interview transcript available."}
 
 IMPORTANT: If a written answer is BLANK, assign score 0 and mark it as not_attempted.
 
-Rate each competency 1-5 (0 if blank/not attempted). Return valid JSON only — no markdown:
+Rate each competency 1-5 (0 if blank/not attempted). Return valid JSON only - no markdown:
 {
   "ratings": {${competencies.map(c => `"${c.id}":3`).join(",")}},
   "not_attempted": {${competencies.map(c => `"${c.id}":false`).join(",")}},
@@ -158,7 +158,7 @@ ${compScores.map(c => `[${c.name}] Score: ${c.overall ? c.overall.toFixed(1) : "
   const prompt1 = `${header}
 
 Return ONLY valid JSON:
-{"executiveSummary":"3-4 sentences tailored to this participant","competencies":[{"name":"exact competency name","measures":"1 sentence on what this competency measures as a leadership behavior","demonstrated":"2 sentences of specific behavioral evidence using AC language — The candidate demonstrated...","strength":"1 sentence on observed strength","developmentOpportunity":"1 sentence on development area"}]}`;
+{"executiveSummary":"3-4 sentences tailored to this participant","competencies":[{"name":"exact competency name","measures":"1 sentence on what this competency measures as a leadership behavior","demonstrated":"2 sentences of specific behavioral evidence using AC language - The candidate demonstrated...","strength":"1 sentence on observed strength","developmentOpportunity":"1 sentence on development area"}]}`;
 
   const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 1500 });
   if (!text1) throw new Error("No AI response (call 1)");
@@ -168,7 +168,7 @@ Return ONLY valid JSON:
   const prompt2 = `${header}
 
 Return ONLY valid JSON for sections 5-7:
-{"overallStrengths":"2-3 sentences on overall strengths across all competencies","areasForDevelopment":"2-3 sentences on top development priorities","devPlan":{"on70":["3-4 specific workplace actions targeting the top 2 development priorities"],"social20":["2-3 coaching or mentoring actions"],"formal10":["2-3 Coursera, HBR, or book recommendations with titles"]},"recommendation":"one category only: Recommended OR Recommended with Development OR Deferred OR Not Recommended","recommendationNarrative":"2-3 sentences using AC language — The candidate demonstrated..."}`;
+{"overallStrengths":"2-3 sentences on overall strengths across all competencies","areasForDevelopment":"2-3 sentences on top development priorities","devPlan":{"on70":["3-4 specific workplace actions targeting the top 2 development priorities"],"social20":["2-3 coaching or mentoring actions"],"formal10":["2-3 Coursera, HBR, or book recommendations with titles"]},"recommendation":"one category only: Recommended OR Recommended with Development OR Deferred OR Not Recommended","recommendationNarrative":"2-3 sentences using AC language - The candidate demonstrated..."}`;
 
   const text2 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt2 }], maxTokens: 1500 });
   if (!text2) throw new Error("No AI response (call 2)");
@@ -237,7 +237,7 @@ Return ONLY valid JSON for the narrative sections:
 Write a one-paragraph summary and recommendation for EACH participant listed above.
 
 Return ONLY valid JSON:
-{"participantSummaries":[{"name":"exact participant name","recommendation":"one category only","summary":"one paragraph using AC language — The candidate demonstrated..."}]}`;
+{"participantSummaries":[{"name":"exact participant name","recommendation":"one category only","summary":"one paragraph using AC language - The candidate demonstrated..."}]}`;
 
   const text2 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt2 }], maxTokens: 1500 });
   if (!text2) throw new Error("No AI response (call 2)");
@@ -379,7 +379,7 @@ export async function downloadAssessorPDF({
     const qLines = doc.splitTextToSize(q.text_advanced || q.text || "", cW);
     doc.text(qLines, margin, getY()); setDocY(getY() + qLines.length * 4 + 3);
     checkPage(15);
-    const ans = ((result?.answers || {})[q.id] || "").trim() || "Not attempted — no written response provided";
+    const ans = ((result?.answers || {})[q.id] || "").trim() || "Not attempted - no written response provided";
     const aLines = doc.splitTextToSize(ans, cW - 4);
     doc.setFillColor(249, 249, 249); doc.rect(margin, getY() - 3, cW, aLines.length * 4.5 + 4, "F");
     doc.setFontSize(9); doc.text(aLines, margin + 2, getY()); setDocY(getY() + aLines.length * 4.5 + 8);
@@ -458,7 +458,7 @@ export async function downloadParticipantPDF({
       doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(...col);
       doc.text(comp.name, margin + 6, getY()); setDocY(getY() + 6);
       doc.setFontSize(10);
-      doc.text(notAttempted ? "Not attempted — score: 0" : `${score}/5 - ${rb.label}`, margin + 6, getY()); setDocY(getY() + 6);
+      doc.text(notAttempted ? "Not attempted - score: 0" : `${score}/5 - ${rb.label}`, margin + 6, getY()); setDocY(getY() + 6);
       if (!notAttempted && reportData?.interpretations?.[comp.id]) {
         doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(60, 60, 60);
         const lines = doc.splitTextToSize(reportData.interpretations[comp.id], cW - 8);

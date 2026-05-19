@@ -246,7 +246,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
       setCaseStudies(Array.isArray(cs2) ? cs2 : []);
       setSelectedId(null); setCsData(null);
       notify("Case study deleted.");
-    } catch { notify("Cannot delete — it may have cohorts attached."); }
+    } catch { notify("Cannot delete - it may have cohorts attached."); }
   }
 
   // ─── Levels ───────────────────────────────────────────────────────────────────
@@ -271,7 +271,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
       await db.deleteLevel(id);
       await reloadCsData();
       notify("Level removed.");
-    } catch { notify("Cannot delete — participants may be using this level."); }
+    } catch { notify("Cannot delete - participants may be using this level."); }
   }
 
   // ─── Competencies ─────────────────────────────────────────────────────────────
@@ -325,7 +325,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
       const participants = await db.getParticipants();
       const linked = Array.isArray(participants) ? participants.filter(p => p.cohort_id === id) : [];
       if (linked.length > 0) {
-        notify(`Cannot delete — ${linked.length} participant${linked.length > 1 ? "s are" : " is"} assigned to this cohort. Remove them first.`);
+        notify(`Cannot delete - ${linked.length} participant${linked.length > 1 ? "s are" : " is"} assigned to this cohort. Remove them first.`);
         return;
       }
       await db.deleteCohort(id);
@@ -431,7 +431,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
     try {
       const d = await db.loadParticipantAssessmentData(p.id);
       if (d.results && d.results.length > 0) {
-        notify(`Cannot delete — ${p.name} has ${d.results.length} submitted result${d.results.length > 1 ? "s" : ""}. Remove results first.`);
+        notify(`Cannot delete - ${p.name} has ${d.results.length} submitted result${d.results.length > 1 ? "s" : ""}. Remove results first.`);
         return;
       }
       await db.deleteParticipant(p.id);
@@ -766,7 +766,7 @@ async function deleteLibComp(id) {
     if (!window.confirm("Delete this question and its assessor guide? This cannot be undone.")) return;
     try {
       const blocked = await db.moduleHasResults(question.module_id);
-      if (blocked) { notify("Cannot delete — participants have already submitted answers for this module. Remove results first."); return; }
+      if (blocked) { notify("Cannot delete - participants have already submitted answers for this module. Remove results first."); return; }
       await db.deleteQuestion(question.id);
       await reloadQgData();
       if (guideOpen === question.id) setGuideOpen(null);
@@ -803,7 +803,7 @@ async function deleteLibComp(id) {
       const suggestions = await db.suggestQuestions(csName, compName);
       setAiSuggestions(Array.isArray(suggestions) ? suggestions.slice(0, 5) : []);
     } catch(e) {
-      setAiError(e.message || "Could not load suggestions — try again.");
+      setAiError(e.message || "Could not load suggestions - try again.");
     }
     setAiLoading(false);
   }
@@ -1012,7 +1012,7 @@ async function deleteLibComp(id) {
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>Assessor Guide — ${esc(caseStudy?.name || "")}</title>
+<title>Assessor Guide: ${esc(caseStudy?.name || "")}</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;background:#fff;color:#111;font-size:13px;line-height:1.5;padding:28px 32px}
@@ -1062,7 +1062,7 @@ body{font-family:Arial,sans-serif;background:#fff;color:#111;font-size:13px;line
   <div><div class="logo-ccm">CCM</div><div class="logo-sub">Consultancy</div></div>
   <div class="cs-meta">
     <h1>${esc(caseStudy?.name || "")}</h1>
-    <p>${[caseStudy?.industry, caseStudy?.description].filter(Boolean).map(esc).join(" — ")}</p>
+    <p>${[caseStudy?.industry, caseStudy?.description].filter(Boolean).map(esc).join(" - ")}</p>
     <div class="badge">Assessor Guide &nbsp;·&nbsp; ${assignedComps.length} competenc${assignedComps.length !== 1 ? "ies" : "y"}</div>
   </div>
 </div>
@@ -1075,7 +1075,7 @@ ${compsHtml}
       win.document.write(html);
       win.document.close();
       setTimeout(() => win.print(), 400);
-    } else { notify("Pop-up blocked — please allow pop-ups for this site, then try again."); }
+    } else { notify("Pop-up blocked - please allow pop-ups for this site, then try again."); }
   }
 
   // ─── Dashboard handlers ──────────────────────────────────────────────────────
@@ -1103,8 +1103,8 @@ ${compsHtml}
     const parts  = participants.filter(p => p.cohort_id === dbCohortId);
     const header = [
       "Name","Username","Job Title","Level","Cohort","Case Study",
-      ...dbModules.map(m => `${m.title} — Status`),
-      ...dbModules.map(m => `${m.title} — Time (min)`),
+      ...dbModules.map(m => `${m.title}: Status`),
+      ...dbModules.map(m => `${m.title}: Time (min)`),
       "Total Time (min)","Tab Switches",
     ];
     const rMap = {};
@@ -1132,7 +1132,7 @@ ${compsHtml}
     const cs       = caseStudies.find(c => c.id === co.case_study_id);
     const appUrl   = window.location.origin;
     const dates    = co.start_date && co.end_date ? `${co.start_date} to ${co.end_date}` : co.start_date || co.end_date || "TBC";
-    const subject  = encodeURIComponent(`CCM Assessment Center — ${co.name}`);
+    const subject  = encodeURIComponent(`CCM Assessment Center: ${co.name}`);
     const body     = encodeURIComponent(
       `Dear Participant,\n\nYou are invited to complete the CCM Assessment Center for ${cs?.name || "the assessment"}.\n\n` +
       `Cohort: ${co.name}\nDates: ${dates}\n\n` +
@@ -1472,13 +1472,13 @@ ${compsHtml}
                         }}
                         title="Click to edit"
                       >
-                        {mbScenForm.case_study_text || "No case study written yet — click ✏ Edit to add one."}
+                        {mbScenForm.case_study_text || "No case study written yet - click ✏ Edit to add one."}
                       </div>
                     )}
 
                     <div style={{ marginTop:18 }}>
                       <label style={S.label}>Appendix (optional)</label>
-                      <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:8 }}>Supplementary reference material — e.g. Appendix A tables, data sheets.</p>
+                      <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:8 }}>Supplementary reference material - e.g. Appendix A tables, data sheets.</p>
                       {mbScenEditing ? (
                         <textarea
                           style={{ ...S.textarea, height:140 }}
@@ -1497,7 +1497,7 @@ ${compsHtml}
                           }}
                           title="Click to edit"
                         >
-                          {mbScenForm.appendix_text || "No appendix — click ✏ Edit to add one."}
+                          {mbScenForm.appendix_text || "No appendix - click ✏ Edit to add one."}
                         </div>
                       )}
                     </div>
@@ -1563,7 +1563,7 @@ ${compsHtml}
 
                   {/* Document */}
                   <div style={{ ...S.card, marginBottom:"1.5rem" }}>
-                    <h3 style={{ margin:"0 0 4px", fontSize:15 }}>Document (optional — PDF or Excel)</h3>
+                    <h3 style={{ margin:"0 0 4px", fontSize:15 }}>Document (optional: PDF or Excel)</h3>
                     <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:14 }}>
                       Rendered inline in the participant view. PDF files display directly; Excel files open via Office Online viewer.
                     </p>
@@ -1606,12 +1606,12 @@ ${compsHtml}
                       {[
                         { key:"reading_time_mins",   label:"Reading time (all levels)" },
                         { key:"break_duration_mins", label:"Break duration (all levels)" },
-                        { key:"sup_q_mins",          label:"Supervisor — Behavioral Qs" },
-                        { key:"sup_task_mins",     label:"Supervisor — Tasks" },
-                        { key:"mgr_q_mins",        label:"Manager — Behavioral Qs" },
-                        { key:"mgr_task_mins",     label:"Manager — Tasks" },
-                        { key:"dir_q_mins",        label:"Director — Behavioral Qs" },
-                        { key:"dir_task_mins",     label:"Director — Tasks" },
+                        { key:"sup_q_mins",          label:"Supervisor: Behavioral Qs" },
+                        { key:"sup_task_mins",     label:"Supervisor: Tasks" },
+                        { key:"mgr_q_mins",        label:"Manager: Behavioral Qs" },
+                        { key:"mgr_task_mins",     label:"Manager: Tasks" },
+                        { key:"dir_q_mins",        label:"Director: Behavioral Qs" },
+                        { key:"dir_task_mins",     label:"Director: Tasks" },
                       ].map(({ key, label }) => (
                         <div key={key}>
                           <label style={S.label}>{label}</label>
@@ -1932,7 +1932,7 @@ ${compsHtml}
                           <div style={{ marginTop:"2rem" }}>
                             <h3 style={{ fontSize:15, margin:"0 0 1rem", color:"#333" }}>Competency Assessor Guides</h3>
                             <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:"0.5rem" }}>
-                              One guide per competency — click ✨ Generate Guide to have Claude write the full descriptor, score anchors, and behavioral indicators.
+                              One guide per competency - click ✨ Generate Guide to have Claude write the full descriptor, score anchors, and behavioral indicators.
                             </p>
                             <p style={{ fontSize:12, color:"#b45309", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:6, padding:"6px 10px", marginBottom:"1rem" }}>
                               ⏳ Generation takes up to 25 seconds. Stay on this page while it runs, and generate one at a time.
@@ -2042,7 +2042,7 @@ ${compsHtml}
                 </div>
                 <div>
                   <label style={S.label}>Cohort Name *</label>
-                  <input style={S.input} value={cohortForm.name} onChange={e => setCohortForm(f => ({ ...f, name:e.target.value }))} placeholder="e.g. Boeing Cohort A — May 2026" />
+                  <input style={S.input} value={cohortForm.name} onChange={e => setCohortForm(f => ({ ...f, name:e.target.value }))} placeholder="e.g. Boeing Cohort A - May 2026" />
                 </div>
                 <div>
                   <label style={S.label}>Start Date</label>
@@ -2182,11 +2182,11 @@ ${compsHtml}
                           <tr key={p.id} style={{ borderTop:"1px solid #f5f5f5" }}>
                             <td style={{ padding:"8px" }}>{p.name}</td>
                             <td style={{ padding:"8px", fontFamily:"monospace", fontSize:12, color:"#555" }}>{p.username}</td>
-                            <td style={{ padding:"8px", color:"#666" }}>{p.role || "—"}</td>
+                            <td style={{ padding:"8px", color:"#666" }}>{p.role || "-"}</td>
                             <td style={{ padding:"8px" }}>
                               {level
                                 ? <span style={{ fontSize:11, background:"#f0f0f0", padding:"2px 8px", borderRadius:20 }}>{level.name} · {level.complexity_tier}</span>
-                                : "—"}
+                                : "-"}
                             </td>
                             <td style={{ padding:"8px", textAlign:"right" }}>
                               {isResetting ? (
@@ -2227,7 +2227,7 @@ ${compsHtml}
               return (
                 <div style={{ ...S.card, marginBottom:"1rem", borderLeft:"3px solid #f59e0b" }}>
                   <div style={{ fontWeight:700, fontSize:13, color:"#92400e", marginBottom:12 }}>⚠ Unmatched cohort ({orphans.length})</div>
-                  {orphans.map(p => <div key={p.id} style={{ fontSize:13, padding:"4px 0" }}>{p.name} — {p.username}</div>)}
+                  {orphans.map(p => <div key={p.id} style={{ fontSize:13, padding:"4px 0" }}>{p.name} - {p.username}</div>)}
                 </div>
               );
             })()}
@@ -2270,7 +2270,7 @@ ${compsHtml}
         <div style={{ ...S.card, marginBottom:"1.5rem", borderLeft:`3px solid ${CCM_RED}` }}>
           <h3 style={{ margin:"0 0 1rem", fontSize:15 }}>Add New Competency</h3>
           <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:14 }}>
-            Type the competency name, select a category, and click Generate — Claude will write the definition automatically.
+            Type the competency name, select a category, and click Generate - Claude will write the definition automatically.
           </p>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 200px", gap:12, marginBottom:14 }}>
             <div>
@@ -2411,7 +2411,7 @@ ${compsHtml}
                   <option value="">Select cohort…</option>
                   {cohorts.map(co => {
                     const cs = caseStudies.find(c => c.id === co.case_study_id);
-                    return <option key={co.id} value={co.id}>{co.name}{cs ? ` — ${cs.name}` : ""}</option>;
+                    return <option key={co.id} value={co.id}>{co.name}{cs ? ` - ${cs.name}` : ""}</option>;
                   })}
                 </select>
                 <button onClick={() => { reloadParticipants(); if (dbCohortId) loadDashboard(dbCohortId); }} style={S.btn("#fff","#555",{ fontSize:12, border:"1px solid #ddd" })}>↻</button>
@@ -2462,7 +2462,7 @@ ${compsHtml}
 
               function renderRow(p, showActions) {
                 const level    = allLevels.find(l => l.id === p.level_id);
-                const lvlName  = level?.name || "—";
+                const lvlName  = level?.name || "-";
                 const lvlColor = lColorMap[lvlName] || "#555";
                 const ts       = tabSwitches(p.id);
                 const flagged  = ts > 3;
@@ -2490,18 +2490,18 @@ ${compsHtml}
                       return (
                         <td key={m.id} style={{ ...tdS, textAlign:"center" }}>
                           <div style={{ display:"inline-flex", flexDirection:"column", alignItems:"center", background: done?"#f0fdf4":"#f5f5f5", border:`1px solid ${done?"#bbf7d0":"#e5e5e5"}`, borderRadius:6, padding:"3px 8px", minWidth:44 }}>
-                            <span style={{ fontSize:12, fontWeight:700, color: done?"#16a34a":"#ccc" }}>{done?"✓":"—"}</span>
+                            <span style={{ fontSize:12, fontWeight:700, color: done?"#16a34a":"#ccc" }}>{done?"✓":"-"}</span>
                             {time && <span style={{ fontSize:10, color:"#888", marginTop:1 }}>{time}</span>}
                           </div>
                         </td>
                       );
                     })}
                     <td style={{ ...tdS, textAlign:"center" }}>
-                      <span style={{ fontSize:12, color:"#555" }}>{tot ? `${tot}m` : "—"}</span>
+                      <span style={{ fontSize:12, color:"#555" }}>{tot ? `${tot}m` : "-"}</span>
                     </td>
                     <td style={{ ...tdS, textAlign:"center" }}>
                       <span style={{ fontSize:12, fontWeight: flagged?700:400, color: flagged?"#dc2626":"#555", background: flagged?"#fef2f2":"transparent", padding: flagged?"2px 6px":0, borderRadius:4 }}>
-                        {ts > 0 ? ts : "—"}{flagged ? " ⚠" : ""}
+                        {ts > 0 ? ts : "-"}{flagged ? " ⚠" : ""}
                       </span>
                     </td>
                     {showActions && (
@@ -2669,11 +2669,11 @@ ${compsHtml}
                                   {p.role && <div style={{ fontSize:11, color:"#888" }}>{p.role}</div>}
                                 </div>
                                 <div style={{ textAlign:"center", minWidth:90 }}>
-                                  <div style={{ fontWeight:700, fontSize:15, color:"#333" }}>{tot ? `${tot} min` : "—"}</div>
+                                  <div style={{ fontWeight:700, fontSize:15, color:"#333" }}>{tot ? `${tot} min` : "-"}</div>
                                   <div style={{ fontSize:10, color:"#aaa", textTransform:"uppercase", letterSpacing:"0.04em" }}>Total time</div>
                                 </div>
                                 <div style={{ textAlign:"center", minWidth:80 }}>
-                                  <div style={{ fontWeight:700, fontSize:20, color: flagged?"#dc2626":ts>0?"#555":"#ccc" }}>{ts>0?ts:"—"}</div>
+                                  <div style={{ fontWeight:700, fontSize:20, color: flagged?"#dc2626":ts>0?"#555":"#ccc" }}>{ts>0?ts:"-"}</div>
                                   <div style={{ fontSize:10, color:"#aaa", textTransform:"uppercase", letterSpacing:"0.04em" }}>Tab switches</div>
                                 </div>
                                 {lastAt && (
@@ -3001,7 +3001,7 @@ ${compsHtml}
             liveTAs.forEach((liveTA, idx) => {
               const p = document.createElement("p");
               p.style.cssText = "font-size:13px;color:#222;line-height:1.8;margin:0 0 0.75rem;white-space:pre-wrap;";
-              p.textContent = liveTA.value.trim() || "—";
+              p.textContent = liveTA.value.trim() || "-";
               cloneTAs[idx].replaceWith(p);
             });
             // Replace selects: read live selected text, substitute a <span>
@@ -3010,7 +3010,7 @@ ${compsHtml}
             liveSels.forEach((liveSel, idx) => {
               const span = document.createElement("span");
               span.style.cssText = "font-size:14px;font-weight:700;color:#e8251a;";
-              span.textContent = liveSel.options[liveSel.selectedIndex]?.text || liveSel.value || "—";
+              span.textContent = liveSel.options[liveSel.selectedIndex]?.text || liveSel.value || "-";
               cloneSels[idx].replaceWith(span);
             });
             const inj = document.createElement("div");
@@ -3179,9 +3179,9 @@ ${compsHtml}
                   {rptPara(content.overallStrengths)}
                   {rptPara(content.areasForDevelopment)}
                   <div className="rp-page-break" />
-                  {rptH("6. Individual Development Plan — 70-20-10 Framework")}
+                  {rptH("6. Individual Development Plan: 70-20-10 Framework")}
                   <div className="rp-avoid-break" style={{ marginBottom:"1.25rem" }}>
-                    {[["70% — On the Job", content.devPlan?.on70],["20% — Learning from Others", content.devPlan?.social20],["10% — Formal Learning", content.devPlan?.formal10]].map(([label, items]) => (
+                    {[["70%: On the Job", content.devPlan?.on70],["20%: Learning from Others", content.devPlan?.social20],["10%: Formal Learning", content.devPlan?.formal10]].map(([label, items]) => (
                       <div key={label} style={{ marginBottom:10 }}>
                         <div style={{ fontSize:12, fontWeight:700, color:RPT_GRAY, marginBottom:4 }}>{label}</div>
                         <ul style={{ margin:0, paddingLeft:18 }}>
@@ -3235,7 +3235,7 @@ ${compsHtml}
                         return (
                           <tr key={i} style={{ background:i%2===0?"#fafafa":"#fff" }}>
                             <td style={{ padding:"8px 10px", fontWeight:600, borderBottom:"1px solid #f0f0f0" }}>{comp.name}</td>
-                            <td style={{ padding:"8px 10px", fontWeight:700, color:scoreColor(sc2), borderBottom:"1px solid #f0f0f0", whiteSpace:"nowrap" }}>{fmtRp(sc2)} — {scoreLblRp(sc2)}</td>
+                            <td style={{ padding:"8px 10px", fontWeight:700, color:scoreColor(sc2), borderBottom:"1px solid #f0f0f0", whiteSpace:"nowrap" }}>{fmtRp(sc2)}: {scoreLblRp(sc2)}</td>
                             <td style={{ padding:"8px 10px", color:"#333", borderBottom:"1px solid #f0f0f0" }}>{comp.evidence}</td>
                             <td style={{ padding:"8px 10px", color:"#555", borderBottom:"1px solid #f0f0f0" }}>{comp.developmentPriority}</td>
                           </tr>
@@ -3311,7 +3311,7 @@ ${compsHtml}
                       <div key={i} className="rp-avoid-break" style={{ marginBottom:"1rem", padding:"14px 16px", background:"#fafafa", borderRadius:8, border:"1px solid #eee" }}>
                         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
                           <span style={{ fontWeight:700, fontSize:13 }}>{ci.name}</span>
-                          <span style={{ fontWeight:700, color:scoreColor(avg) }}>{fmtRp(avg)} / 5 — {scoreLblRp(avg)}</span>
+                          <span style={{ fontWeight:700, color:scoreColor(avg) }}>{fmtRp(avg)} / 5: {scoreLblRp(avg)}</span>
                         </div>
                         {rptPara(ci.cohortObs, { margin:0, fontSize:12 })}
                       </div>
@@ -3345,12 +3345,12 @@ ${compsHtml}
                   </div>
                   {rptH("6. Overall Strengths and Development Themes")}
                   {rptPara(content.overallStrengths)}{rptPara(content.developmentThemes)}
-                  {rptH(`7. Top Development Priorities — ${sr.cohort?.name || "Cohort"}`)}
+                  {rptH(`7. Top Development Priorities: ${sr.cohort?.name || "Cohort"}`)}
                   {(content.devPriorities||[]).map((dp,i)=>(
                     <div key={i} className="rp-avoid-break" style={{ marginBottom:"1rem", padding:"14px 16px", background:"#fafafa", borderRadius:8, border:"1px solid #eee" }}>
                       <div style={{ fontWeight:700, fontSize:13, color:RPT_RED, marginBottom:4 }}>Priority {i+1}: {dp.priority || dp.competency}</div>
                       {dp.rationale && <p style={{ fontSize:12, color:"#555", fontStyle:"italic", margin:"0 0 8px", lineHeight:1.6 }}>{dp.rationale}</p>}
-                      {[["70% — On the Job", dp.on70],["20% — Learning from Others", dp.social20],["10% — Formal Learning", dp.formal10]].map(([lbl,txt])=>(
+                      {[["70%: On the Job", dp.on70],["20%: Learning from Others", dp.social20],["10%: Formal Learning", dp.formal10]].map(([lbl,txt])=>(
                         <p key={lbl} style={{ fontSize:12, color:"#333", margin:"0 0 4px" }}><strong>{lbl}: </strong>{txt}</p>
                       ))}
                     </div>
@@ -3500,10 +3500,10 @@ ${compsHtml}
                   {rptH("5. Overall Strengths and Areas for Development")}
                   {LBL("Overall Strengths")}{ta(ec.overallStrengths, v=>upd("overallStrengths",v), 3)}
                   {LBL("Areas for Development")}{ta(ec.areasForDevelopment, v=>upd("areasForDevelopment",v), 3)}
-                  {rptH("6. Individual Development Plan — 70-20-10 Framework")}
-                  {LBL("70% — On the Job (one action per line)")}{ta((dp.on70||[]).join("\n"), v=>updPlanArr("on70",v), 4)}
-                  {LBL("20% — Learning from Others (one per line)")}{ta((dp.social20||[]).join("\n"), v=>updPlanArr("social20",v), 3)}
-                  {LBL("10% — Formal Learning (one per line)")}{ta((dp.formal10||[]).join("\n"), v=>updPlanArr("formal10",v), 3)}
+                  {rptH("6. Individual Development Plan: 70-20-10 Framework")}
+                  {LBL("70%: On the Job (one action per line)")}{ta((dp.on70||[]).join("\n"), v=>updPlanArr("on70",v), 4)}
+                  {LBL("20%: Learning from Others (one per line)")}{ta((dp.social20||[]).join("\n"), v=>updPlanArr("social20",v), 3)}
+                  {LBL("10%: Formal Learning (one per line)")}{ta((dp.formal10||[]).join("\n"), v=>updPlanArr("formal10",v), 3)}
                   {rptH("7. Result of Assessment")}
                   {LBL("Recommendation")}
                   <select value={ec.recommendation||"Recommended"} onChange={e=>upd("recommendation",e.target.value)}
@@ -3600,9 +3600,9 @@ ${compsHtml}
                       <div style={{ fontWeight:700, fontSize:13, color:RPT_RED, marginBottom:8 }}>Priority {i+1}</div>
                       {LBL("Priority Theme")}{ta(dp.priority||dp.competency||"", v=>updDP(i,"priority",v), 1)}
                       {LBL("Rationale (1 sentence)")}{ta(dp.rationale||"", v=>updDP(i,"rationale",v), 1)}
-                      {LBL("70% — On the Job")}{ta(dp.on70, v=>updDP(i,"on70",v), 1)}
-                      {LBL("20% — Learning from Others")}{ta(dp.social20, v=>updDP(i,"social20",v), 1)}
-                      {LBL("10% — Formal Learning")}{ta(dp.formal10, v=>updDP(i,"formal10",v), 1)}
+                      {LBL("70%: On the Job")}{ta(dp.on70, v=>updDP(i,"on70",v), 1)}
+                      {LBL("20%: Learning from Others")}{ta(dp.social20, v=>updDP(i,"social20",v), 1)}
+                      {LBL("10%: Formal Learning")}{ta(dp.formal10, v=>updDP(i,"formal10",v), 1)}
                     </div>
                   ))}
                   {rptH("8. Individual Participant Summaries")}
@@ -3633,7 +3633,7 @@ ${compsHtml}
                   <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:1001, background:"#1a1a1a", padding:"10px 20px", display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
                     <div style={{ color:"#fff", fontWeight:700, fontSize:13 }}>
                       {rpReport.type === "individual" ? "Individual Report" : rpReport.type === "client" ? "Client Report" : "Cohort Report"}
-                      {" — "}{rpReport.selResult?.participant?.name || ""}
+                      {" - "}{rpReport.selResult?.participant?.name || ""}
                       {rpEditMode && <span style={{ marginLeft:8, fontSize:11, color:"#f59e0b", fontWeight:400 }}>✏ Editing</span>}
                     </div>
                     <div style={{ flex:1 }} />
@@ -3763,7 +3763,7 @@ ${compsHtml}
                       {/* Part 1 — behavioral questions */}
                       <div style={{ ...S.card, marginBottom:"1.5rem" }}>
                         <div style={{ fontSize:11, fontWeight:700, color:CCM_RED, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"1.25rem" }}>
-                          Part 1 — Behavioral Questions
+                          Part 1: Behavioral Questions
                         </div>
                         {compList.length === 0 && (
                           <p style={{ fontSize:13, color:"#888", margin:0 }}>No questions found for this module.</p>
@@ -3814,7 +3814,7 @@ ${compsHtml}
                       {/* Part 2 */}
                       <div style={{ ...S.card, marginBottom:"1.5rem" }}>
                         <div style={{ fontSize:11, fontWeight:700, color:CCM_RED, textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"1.25rem" }}>
-                          Part 2 — Case Study Tasks
+                          Part 2: Case Study Tasks
                         </div>
                         {!p2 ? (
                           <p style={{ fontSize:13, color:"#aaa", margin:0 }}>No Part 2 submission recorded.</p>
@@ -3945,12 +3945,12 @@ ${compsHtml}
                         </div>
                         {rpReportLoading && (
                           <p style={{ fontSize:11, color:"#888", marginBottom:"0.5rem", fontStyle:"italic" }}>
-                            Claude is writing the report — this usually takes 15–30 seconds…
+                            Claude is writing the report - this usually takes 15–30 seconds…
                           </p>
                         )}
                         {/* Write Manually row */}
                         <div style={{ borderTop:"1px solid #f0f0f0", paddingTop:"0.75rem" }}>
-                          <div style={{ fontSize:11, color:"#aaa", marginBottom:6 }}>Write Manually — fill in each section yourself</div>
+                          <div style={{ fontSize:11, color:"#aaa", marginBottom:6 }}>Write Manually - fill in each section yourself</div>
                           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                             {[
                               { type:"individual", label:"Individual" },
@@ -4083,7 +4083,7 @@ ${compsHtml}
                   <div style={{ ...S.card, marginBottom:"1.5rem" }}>
                     <h3 style={{ margin:"0 0 0.5rem", fontSize:15 }}>Levels</h3>
                     <p style={{ fontSize:12, color:"#888", marginBottom:14, marginTop:0 }}>
-                      Each level gets a complexity tier — <strong>standard</strong> (simpler scenario/questions) or <strong>advanced</strong> (full version).
+                      Each level gets a complexity tier - <strong>standard</strong> (simpler scenario/questions) or <strong>advanced</strong> (full version).
                     </p>
 
                     {levels.length === 0 && <p style={{ fontSize:13, color:"#aaa", marginBottom:12 }}>No levels yet.</p>}
