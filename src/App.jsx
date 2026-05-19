@@ -1396,9 +1396,9 @@ ${compsHtml}
                     <div style={{ marginTop:14 }}>
                       <label style={S.label}>Module Type</label>
                       <select style={S.input} value={mbModForm.module_type || "questions"} onChange={e => setMbModForm(f => ({ ...f, module_type:e.target.value }))}>
-                        <option value="questions">Interview Questions only</option>
-                        <option value="presentation">Presentation Task only</option>
-                        <option value="both">Both — Questions then Presentation Task</option>
+                        <option value="questions">Behavioral Questions Only</option>
+                        <option value="both">Behavioral Questions + Case Study</option>
+                        <option value="part2only">Case Study Only</option>
                       </select>
                     </div>
                   </div>

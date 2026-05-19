@@ -1193,11 +1193,8 @@ function PresentationWaitingScreen({ participant }) {
           <CCMLogo scale={1.1} />
           <div style={{ fontSize: 48, margin: "1.5rem 0 1rem" }}>🎤</div>
           <h2 style={{ fontFamily: SERIF, fontSize: 28, margin: "0 0 1rem", color: "#111" }}>You're Ready to Present</h2>
-          <p style={{ fontSize: 15, color: "#444", lineHeight: 1.75, margin: "0 0 1.25rem" }}>
-            Your assessor will now invite you to share your presentation. Please have your presentation open and ready to share via Zoom, Microsoft Teams, or in-person as instructed.
-          </p>
-          <p style={{ fontSize: 13, color: "#aaa", margin: 0, lineHeight: 1.6 }}>
-            Do not close this window until your assessor confirms your session is complete.
+          <p style={{ fontSize: 15, color: "#444", lineHeight: 1.75, margin: 0 }}>
+            Your preparation time is complete. You may now proceed with your presentation as scheduled. You can close this window.
           </p>
         </div>
       </div>
@@ -1466,6 +1463,10 @@ export default function ParticipantApp() {
     setScreen("assessment");
     const mod = modules[0];
     const mt  = mod?.module_type || "questions";
+    if (mt === "part2only") {
+      setAssessPhase("part2Transition");
+      return;
+    }
     setAssessPhase(mt === "presentation" ? "presentation" : "questions");
     startModuleTimer(mod);
   }
@@ -1567,6 +1568,10 @@ export default function ParticipantApp() {
       setDeclarationConfirmed(false);
       prepStartRef.current = null;
       const mt = nextMod?.module_type || "questions";
+      if (mt === "part2only") {
+        setAssessPhase("part2Transition");
+        return;
+      }
       setAssessPhase(mt === "presentation" ? "presentation" : "questions");
       startModuleTimer(nextMod);
     } else {
