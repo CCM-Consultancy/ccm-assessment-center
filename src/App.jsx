@@ -1238,9 +1238,13 @@ ${compsHtml}
   async function selectRpResult(result) {
     setRpSelKey(result.participant_id + "|" + result.module_id);
     try {
-      const { questions, competencies } = await db.getQuestionsForModule(result.module_id);
+      const [{ questions, competencies }, mods] = await Promise.all([
+        db.getQuestionsForModule(result.module_id),
+        db.getModules(),
+      ]);
       setRpQuestions(questions);
       setRpCompetencies(competencies);
+      setRpModules(mods || []);
       const ex = result.scores || {};
       setRpScores({ part1: ex.part1 || {}, part2: ex.part2 || {}, recommendation: ex.recommendation || "", assessorNotes: ex.assessorNotes || {}, overallNarrative: ex.overallNarrative || "" });
     } catch(e) { notify("Failed to load questions: " + e.message); }
@@ -2960,6 +2964,14 @@ ${compsHtml}
               }, {}));
           const compList = baseComps.map(c => ({ ...c, questions: qsByComp[c.id] || [] }));
 
+          // notesCompList = Part 1 comps + any Part 2 comps not already in compList
+          const _selModForNotes = rpModules.find(m => m.id === selResult?.module_id);
+          const _p2IdsForNotes  = _selModForNotes?.part2_competency_ids || [];
+          const _p2OnlyComps    = _p2IdsForNotes.length > 0
+            ? rpCompetencies.filter(c => _p2IdsForNotes.includes(c.id) && !compList.find(x => x.id === c.id))
+            : [];
+          const notesCompList = [...compList, ..._p2OnlyComps];
+
           function p1Avg(cId) {
             const qs = (compList.find(c => c.id === cId) || {}).questions || [];
             const scores = qs.map(q => rpScores.part1[q.id]).filter(s => s && !s.not_attempted && s.score);
@@ -3483,7 +3495,7 @@ ${compsHtml}
             if (!selResult) return;
             const saved = rpScores.assessorNotes || {};
             const notes = {};
-            compList.forEach(c => { notes[c.id] = saved[c.id] || ""; });
+            notesCompList.forEach(c => { notes[c.id] = saved[c.id] || ""; });
             setRpManualNotes({ type, notes, overallNarrative: rpScores.overallNarrative || "" });
           }
           async function doGenerateFromNotes() {
@@ -3776,7 +3788,7 @@ ${compsHtml}
                     <p style={{ fontSize:13, color:"#555", marginBottom:20 }}>
                       Fill in your observations below. Claude will use these notes to write the full structured report. Scores are pulled automatically from the scoring panel.
                     </p>
-                    {compList.map(comp => (
+                    {notesCompList.map(comp => (
                       <div key={comp.id} style={{ marginBottom:20 }}>
                         <label style={{ fontSize:13, fontWeight:700, color:"#333", display:"block", marginBottom:4 }}>
                           {comp.name}
