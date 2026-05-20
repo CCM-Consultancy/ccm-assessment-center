@@ -328,6 +328,18 @@ Return ONLY valid JSON:
     return JSON.parse(text.replace(/```json|```/g, "").trim());
   }
 
+  if (type === "cohort") {
+    const prompt = `${header}
+
+Using the assessor's observations above, write a cohort-format report for this participant. Recommendation is locked to: "${recommendation}". Use it exactly.
+
+Return ONLY valid JSON:
+{"executiveSummary":"3-4 sentences on overall performance","competencyInsights":[{"name":"competency name","cohortObs":"2-3 sentences on observed behaviour"}],"overallStrengths":"2-3 sentences on key strengths","developmentThemes":"2-3 sentences on development areas","participantSummaries":[{"name":"${participant?.name || "Participant"}","recommendation":"${recommendation}","summary":"one paragraph using AC language - The candidate demonstrated..."}]}`;
+    const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 1800 });
+    if (!text) throw new Error("No AI response");
+    return { ...JSON.parse(text.replace(/```json|```/g, "").trim()), assessorDeclaration: BOILERPLATE_ASSESSOR_DECLARATION };
+  }
+
   throw new Error("generateReportFromNotes: unsupported type " + type);
 }
 

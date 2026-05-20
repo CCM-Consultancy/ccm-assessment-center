@@ -1242,7 +1242,7 @@ ${compsHtml}
       setRpQuestions(questions);
       setRpCompetencies(competencies);
       const ex = result.scores || {};
-      setRpScores({ part1: ex.part1 || {}, part2: ex.part2 || {}, recommendation: ex.recommendation || "" });
+      setRpScores({ part1: ex.part1 || {}, part2: ex.part2 || {}, recommendation: ex.recommendation || "", assessorNotes: ex.assessorNotes || {}, overallNarrative: ex.overallNarrative || "" });
     } catch(e) { notify("Failed to load questions: " + e.message); }
   }
 
@@ -1617,21 +1617,21 @@ ${compsHtml}
                       </select>
                     </div>
                     {/* Part 2 competency mapping */}
-                    {mbAssignedComps.length > 0 && (
+                    {libComps.length > 0 && (
                       <div style={{ marginBottom:16, padding:"14px", background:"#f8fafc", border:"1px solid #e5e7ef", borderRadius:8 }}>
                         <div style={{ fontSize:13, fontWeight:700, marginBottom:4 }}>Part 2: Case Study Competencies</div>
                         <p style={{ fontSize:12, color:"#888", margin:"0 0 10px" }}>
                           Select which competencies are assessed in the Case Study exercise. These may be the same as or different from the behavioral interview competencies.
                         </p>
                         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                          {mbAssignedComps.map(ac => (
-                            <label key={ac.competency_id} style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, cursor:"pointer" }}>
+                          {libComps.map(c => (
+                            <label key={c.id} style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, cursor:"pointer" }}>
                               <input
                                 type="checkbox"
-                                checked={mbPart2CompIds.includes(ac.competency_id)}
-                                onChange={e => setMbPart2CompIds(ids => e.target.checked ? [...ids, ac.competency_id] : ids.filter(id => id !== ac.competency_id))}
+                                checked={mbPart2CompIds.includes(c.id)}
+                                onChange={e => setMbPart2CompIds(ids => e.target.checked ? [...ids, c.id] : ids.filter(id => id !== c.id))}
                               />
-                              <span style={{ fontWeight:500 }}>{ac.competency?.name || ac.competency_id}</span>
+                              <span style={{ fontWeight:500 }}>{c.name}</span>
                             </label>
                           ))}
                         </div>
@@ -3481,9 +3481,10 @@ ${compsHtml}
           }
           function openNotesForm(type) {
             if (!selResult) return;
+            const saved = rpScores.assessorNotes || {};
             const notes = {};
-            compList.forEach(c => { notes[c.id] = ""; });
-            setRpManualNotes({ type, notes, overallNarrative: "" });
+            compList.forEach(c => { notes[c.id] = saved[c.id] || ""; });
+            setRpManualNotes({ type, notes, overallNarrative: rpScores.overallNarrative || "" });
           }
           async function doGenerateFromNotes() {
             if (!rpManualNotes || !selResult) return;
@@ -3763,7 +3764,7 @@ ${compsHtml}
                   <div style={{ position:"fixed", inset:0, zIndex:999, background:"rgba(0,0,0,0.65)" }} />
                   <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:1001, background:"#1a1a1a", padding:"10px 20px", display:"flex", alignItems:"center", gap:10 }}>
                     <div style={{ color:"#fff", fontWeight:700, fontSize:13 }}>
-                      Generate {rpManualNotes.type === "individual" ? "Individual" : "Client"} Report from Notes
+                      Generate {rpManualNotes.type === "individual" ? "Individual" : rpManualNotes.type === "client" ? "Client" : "Cohort"} Report from Notes
                     </div>
                     <div style={{ flex:1 }} />
                     <button onClick={() => setRpManualNotes(null)}
@@ -3785,7 +3786,7 @@ ${compsHtml}
                           style={{ width:"100%", padding:"8px 10px", fontSize:13, border:"1px solid #c0c0c0", borderRadius:6, resize:"vertical", fontFamily:"inherit", boxSizing:"border-box" }}
                           placeholder="Describe what the candidate demonstrated, one key strength, and one development area. (max 150 words)"
                           value={rpManualNotes.notes[comp.id] || ""}
-                          onChange={e => setRpManualNotes(prev => ({ ...prev, notes: { ...prev.notes, [comp.id]: e.target.value } }))}
+                          onChange={e => { const val = e.target.value; setRpManualNotes(prev => ({ ...prev, notes: { ...prev.notes, [comp.id]: val } })); setRpScores(prev => ({ ...prev, assessorNotes: { ...(prev.assessorNotes||{}), [comp.id]: val } })); }}
                         />
                       </div>
                     ))}
@@ -3813,16 +3814,25 @@ ${compsHtml}
                         style={{ width:"100%", padding:"8px 10px", fontSize:13, border:"1px solid #c0c0c0", borderRadius:6, resize:"vertical", fontFamily:"inherit", boxSizing:"border-box" }}
                         placeholder="Write 2-3 sentences summarising the candidate's overall performance and justifying the recommendation. (max 100 words)"
                         value={rpManualNotes.overallNarrative}
-                        onChange={e => setRpManualNotes(prev => ({ ...prev, overallNarrative: e.target.value }))}
+                        onChange={e => { const val = e.target.value; setRpManualNotes(prev => ({ ...prev, overallNarrative: val })); setRpScores(prev => ({ ...prev, overallNarrative: val })); }}
                       />
                     </div>
-                    <button
-                      onClick={doGenerateFromNotes}
-                      disabled={rpNotesGenerating}
-                      style={S.btn(CCM_RED,"#fff",{ fontSize:14, padding:"12px 28px", opacity:rpNotesGenerating?0.6:1 })}
-                    >
-                      {rpNotesGenerating ? "Generating Report…" : "Generate Report from Notes"}
-                    </button>
+                    <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                      <button
+                        onClick={async () => { await saveRpScores(); notify("✓ Notes saved."); }}
+                        disabled={rpNotesGenerating}
+                        style={S.btn("#374151","#fff",{ fontSize:14, padding:"12px 24px" })}
+                      >
+                        Save Notes
+                      </button>
+                      <button
+                        onClick={doGenerateFromNotes}
+                        disabled={rpNotesGenerating}
+                        style={S.btn(CCM_RED,"#fff",{ fontSize:14, padding:"12px 28px", opacity:rpNotesGenerating?0.6:1 })}
+                      >
+                        {rpNotesGenerating ? "Generating Report…" : "Generate Report from Notes"}
+                      </button>
+                    </div>
                     {rpNotesGenerating && (
                       <p style={{ fontSize:11, color:"#888", marginTop:8, fontStyle:"italic" }}>Claude is writing the report - this usually takes 15-30 seconds…</p>
                     )}
@@ -4188,6 +4198,7 @@ ${compsHtml}
                             {[
                               { type:"individual", label:"Individual" },
                               { type:"client",     label:"Client" },
+                              { type:"cohort",     label:"Cohort" },
                             ].map(({ type, label }) => (
                               <button key={type}
                                 onClick={() => openNotesForm(type)}
