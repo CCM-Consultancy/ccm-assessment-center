@@ -107,6 +107,19 @@ export async function deleteLibraryCompetency(id) {
   await q("ccm_competencies", "DELETE", null, `?id=eq.${id}`);
 }
 
+// ─── Competency lookup by IDs (both tables) ───────────────────────────────────
+
+export async function getCompetenciesByIds(ids) {
+  if (!ids || !ids.length) return [];
+  const filter = `?id=in.(${ids.join(",")})&select=*`;
+  const [ccmComps, csComps] = await Promise.all([
+    arr(await q("ccm_competencies", "GET", null, filter)),
+    arr(await q("cs_competencies",  "GET", null, filter)),
+  ]);
+  const seen = new Set(ccmComps.map(c => c.id));
+  return [...ccmComps, ...csComps.filter(c => !seen.has(c.id))];
+}
+
 // ─── Case Study Competency Assignments ────────────────────────────────────────
 
 export async function getAssignedCompetencies(caseStudyId) {

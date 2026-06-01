@@ -932,12 +932,27 @@ async function deleteLibComp(id) {
         db.getFullCaseStudy(csId),
         db.getAssignedCompetencies(csId),
       ]);
+
+      // Include Part 2-only competencies from module part2_competency_ids
+      const assignedIds = new Set(assigned.map(a => a.competency_id));
+      const p2IdsFromModules = [...new Set(
+        (fullData.modules || []).flatMap(m =>
+          Array.isArray(m.part2_competency_ids) ? m.part2_competency_ids : []
+        )
+      )].filter(id => !assignedIds.has(id));
+      let extraAssigned = [];
+      if (p2IdsFromModules.length) {
+        const comps = await db.getCompetenciesByIds(p2IdsFromModules);
+        extraAssigned = comps.map(c => ({ competency_id: c.id, competency: c, is_part2_only: true }));
+      }
+      const allAssigned = [...assigned, ...extraAssigned];
+
       const guides = {};
-      await Promise.all(assigned.map(async a => {
+      await Promise.all(allAssigned.map(async a => {
         const guide = await db.getCompetencyGuide(csId, a.competency_id);
         if (guide) guides[a.competency_id] = guide;
       }));
-      setAgData({ ...fullData, assignedComps: assigned, guides });
+      setAgData({ ...fullData, assignedComps: allAssigned, guides });
     } catch(e) { notify(`Failed to load assessor guide: ${e.message}`); }
     setAgLoading(false);
   }
@@ -2971,6 +2986,16 @@ ${compsHtml}
             ? rpCompetencies.filter(c => rpPart2CompIds.includes(c.id))
             : compList;
 
+          // Full competency list: Part 1 comps + any Part 2-only comps not already in compList
+          const allCompList = rpPart2CompIds.length > 0
+            ? [
+                ...compList,
+                ...rpCompetencies
+                  .filter(c => rpPart2CompIds.includes(c.id) && !compList.find(x => x.id === c.id))
+                  .map(c => ({ ...c, questions: [] })),
+              ]
+            : compList;
+
           function p1Avg(cId) {
             const qs = (compList.find(c => c.id === cId) || {}).questions || [];
             const scores = qs.map(q => rpScores.part1[q.id]).filter(s => s && !s.not_attempted && s.score);
@@ -3083,7 +3108,7 @@ ${compsHtml}
                 cohort:      selResult.cohort,
                 module:      selResult.module,
                 questions:   rpQuestions,
-                compList,
+                compList:    allCompList,
                 scores:      rpScores,
                 answers:     selResult.answers,
                 part2Answers: selResult.part2_answers,
@@ -3105,7 +3130,7 @@ ${compsHtml}
                 );
                 const cohortData = cohortRows.map(r => {
                   const sc = r.participant_id === selResult.participant_id ? rpScores : (r.scores || {part1:{},part2:{}});
-                  const cs = compList.map(comp => {
+                  const cs = allCompList.map(comp => {
                     const qs2 = rpQuestions.filter(q => q.competency_id === comp.id);
                     const p1s = qs2.map(q => sc.part1?.[q.id]).filter(s => s && !s.not_attempted && s.score);
                     const p1a = p1s.length ? p1s.reduce((a,s)=>a+s.score,0)/p1s.length : null;
@@ -3127,15 +3152,15 @@ ${compsHtml}
                   cohortName:  selResult.cohort?.name || "Cohort",
                   moduleName:  selResult.module?.name || selResult.module?.title || "Module",
                   cohortData,
-                  compList,
+                  compList:    allCompList,
                   assessorName: "CCM Consultancy",
                   assessorRecommendation,
                 });
                 content._cohortData   = cohortData;
-                content._compList     = compList.map(c=>c.name);
+                content._compList     = allCompList.map(c=>c.name);
                 content._scoreLbl     = scoreLbl;
               }
-              setRpReport({ type, content, selResult: { ...selResult }, compList, rpScores, rpQuestions, completedAt: selResult.completed_at });
+              setRpReport({ type, content, selResult: { ...selResult }, compList: allCompList, rpScores, rpQuestions, completedAt: selResult.completed_at });
             } catch(e) { notify("Report generation failed: " + e.message); }
             setRpReportLoading(false);
             setRpReportType(null);
@@ -3450,7 +3475,7 @@ ${compsHtml}
               executiveSummary:"",
               assessmentMethodology: ai.BOILERPLATE_METHODOLOGY,
               howToUse: ai.BOILERPLATE_HOW_TO_USE,
-              competencies: compList.map(c => ({ name:c.name, measures:"", demonstrated:"", strength:"", developmentOpportunity:"" })),
+              competencies: allCompList.map(c => ({ name:c.name, measures:"", demonstrated:"", strength:"", developmentOpportunity:"" })),
               overallStrengths:"", areasForDevelopment:"",
               devPlan: { on70:[""], social20:[""], formal10:[""] },
               recommendation:"Recommended", recommendationNarrative:"",
@@ -3458,19 +3483,19 @@ ${compsHtml}
             if (type === "client") return {
               executiveSummary:"",
               assessorDeclaration: ai.BOILERPLATE_ASSESSOR_DECLARATION,
-              competencies: compList.map(c => ({ name:c.name, evidence:"", developmentPriority:"" })),
+              competencies: allCompList.map(c => ({ name:c.name, evidence:"", developmentPriority:"" })),
               overallStrengths:"", areasForDevelopment:"",
-              devSummary: compList.map(c => ({ competency:c.name, action:"" })),
+              devSummary: allCompList.map(c => ({ competency:c.name, action:"" })),
               recommendation:"Recommended", recommendationNarrative:"",
             };
             return {
               executiveSummary:"",
               assessorDeclaration: ai.BOILERPLATE_ASSESSOR_DECLARATION,
-              competencyInsights: compList.map(c => ({ name:c.name, cohortObs:"" })),
+              competencyInsights: allCompList.map(c => ({ name:c.name, cohortObs:"" })),
               overallStrengths:"", developmentThemes:"",
               devPriorities: [{priority:"",rationale:"",on70:"",social20:"",formal10:""},{priority:"",rationale:"",on70:"",social20:"",formal10:""},{priority:"",rationale:"",on70:"",social20:"",formal10:""}],
               participantSummaries: [],
-              _cohortData:[], _compList:compList.map(c=>c.name), _scoreLbl: v=>v===null?"–":Number(v).toFixed(1),
+              _cohortData:[], _compList:allCompList.map(c=>c.name), _scoreLbl: v=>v===null?"–":Number(v).toFixed(1),
             };
           }
           function closeReport() { setRpReport(null); setRpEditMode(false); setRpEditContent(null); setRpOrigContent(null); }
@@ -3485,7 +3510,7 @@ ${compsHtml}
           function openManualReport(type) {
             if (!selResult) return;
             const empty = makeEmptyContent(type);
-            setRpReport({ type, content: empty, selResult: { ...selResult }, compList, rpScores, rpQuestions, completedAt: selResult.completed_at });
+            setRpReport({ type, content: empty, selResult: { ...selResult }, compList: allCompList, rpScores, rpQuestions, completedAt: selResult.completed_at });
             setRpOrigContent(null);
             setRpEditContent(JSON.parse(JSON.stringify(empty)));
             setRpEditMode(true);
@@ -3506,14 +3531,14 @@ ${compsHtml}
                 level:            selResult.level,
                 cohort:           selResult.cohort,
                 module:           selResult.module,
-                compList,
+                compList:         allCompList,
                 scores:           rpScores,
                 assessorNotes:    rpManualNotes.notes,
                 overallNarrative: rpManualNotes.overallNarrative,
                 recommendation:   rpScores.recommendation || rpManualNotes.recommendation || "Not Specified",
                 type:             rpManualNotes.type,
               });
-              setRpReport({ type: rpManualNotes.type, content, selResult: { ...selResult }, compList, rpScores, rpQuestions, completedAt: selResult.completed_at });
+              setRpReport({ type: rpManualNotes.type, content, selResult: { ...selResult }, compList: allCompList, rpScores, rpQuestions, completedAt: selResult.completed_at });
               setRpOrigContent(null);
               setRpEditContent(null);
               setRpEditMode(false);
@@ -4048,8 +4073,8 @@ ${compsHtml}
                       {(() => {
                         const selMod = rpModules.find(m => m.id === selResult?.module_id);
                         const p2Ids  = selMod?.part2_competency_ids || [];
-                        // Determine which comps appear in which parts
-                        const summaryRows = compList.map(comp => {
+                        // Determine which comps appear in which parts (includes Part 2-only comps)
+                        const summaryRows = allCompList.map(comp => {
                           const inP1 = (comp.questions || []).length > 0;
                           const inP2 = p2Ids.length === 0 ? inP1 : p2Ids.includes(comp.id);
                           const a    = inP1 ? p1Avg(comp.id) : null;
