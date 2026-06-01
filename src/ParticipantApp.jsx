@@ -969,11 +969,14 @@ function Part1Screen({ moduleTitle, moduleIdx, moduleCount, questions, competenc
 
                         <div style={{ marginBottom: "1rem" }}>
                           <div style={{ fontSize: 12, fontWeight: 700, color: "#666", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                            Your transcript:
+                            Your transcript (edit to correct errors):
                           </div>
-                          <div style={{ padding: "10px 14px", background: "#f8f9fb", border: "1px solid #e8e8e8", borderRadius: 8, fontSize: 13, lineHeight: 1.75, color: "#333", whiteSpace: "pre-wrap", minHeight: 60 }}>
-                            {transcript || <span style={{ color: "#bbb", fontStyle: "italic" }}>No transcript captured.</span>}
-                          </div>
+                          <textarea
+                            style={{ ...TEXTAREA, minHeight: 80 }}
+                            value={transcript}
+                            onChange={e => { setTranscript(e.target.value); finalTextRef.current = e.target.value; }}
+                            placeholder="Edit transcript to correct errors..."
+                          />
                         </div>
 
                         <div style={{ marginBottom: "1rem" }}>
@@ -1009,7 +1012,6 @@ function Part1Screen({ moduleTitle, moduleIdx, moduleCount, questions, competenc
                   </div>
                 )}
 
-                {/* Navigation */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "1.5rem", gap: 12 }}>
                   <button
                     onClick={() => tryNavigate(Math.max(0, currentQIdx - 1))}

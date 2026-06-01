@@ -550,11 +550,15 @@ export async function getModules() {
 }
 
 export async function getQuestionsForModule(moduleId) {
-  const questions = arr(await q("cs_questions", "GET", null,
-    `?module_id=eq.${moduleId}&select=*&order=display_order.asc`));
+  const [modRows, questions] = await Promise.all([
+    arr(await q("cs_modules", "GET", null, `?id=eq.${moduleId}&select=part2_competency_ids`)),
+    arr(await q("cs_questions", "GET", null, `?module_id=eq.${moduleId}&select=*&order=display_order.asc`)),
+  ]);
+  const part2CompetencyIds = Array.isArray(modRows[0]?.part2_competency_ids) ? modRows[0].part2_competency_ids : [];
   const usedIds = [...new Set(questions.map(x => x.competency_id).filter(Boolean))];
-  if (!usedIds.length) return { questions, competencies: [] };
-  const filter = `?id=in.(${usedIds.join(",")})&select=*`;
+  const allIds  = [...new Set([...usedIds, ...part2CompetencyIds])];
+  if (!allIds.length) return { questions, competencies: [], part2CompetencyIds };
+  const filter = `?id=in.(${allIds.join(",")})&select=*`;
   const [ccmComps, csComps] = await Promise.all([
     arr(await q("ccm_competencies", "GET", null, filter)),
     arr(await q("cs_competencies",  "GET", null, filter)),
@@ -564,8 +568,9 @@ export async function getQuestionsForModule(moduleId) {
   const comps = [...ccmComps, ...csComps.filter(c => !seen.has(c.id))];
   const compMap = Object.fromEntries(comps.map(c => [c.id, c]));
   return {
-    questions:    questions.map(qs => ({ ...qs, competency: compMap[qs.competency_id] || null })),
-    competencies: comps,
+    questions:          questions.map(qs => ({ ...qs, competency: compMap[qs.competency_id] || null })),
+    competencies:       comps,
+    part2CompetencyIds,
   };
 }
 

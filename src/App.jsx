@@ -136,6 +136,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const [rpSelKey,        setRpSelKey]        = useState(null);
   const [rpQuestions,     setRpQuestions]     = useState([]);
   const [rpCompetencies,  setRpCompetencies]  = useState([]);
+  const [rpPart2CompIds,  setRpPart2CompIds]  = useState([]);
   const [rpScores,        setRpScores]        = useState({ part1:{}, part2:{}, recommendation:"" });
   const [rpSaving,        setRpSaving]        = useState(false);
   const [rpReport,        setRpReport]        = useState(null);
@@ -1238,12 +1239,13 @@ ${compsHtml}
   async function selectRpResult(result) {
     setRpSelKey(result.participant_id + "|" + result.module_id);
     try {
-      const [{ questions, competencies }, mods] = await Promise.all([
+      const [{ questions, competencies, part2CompetencyIds }, mods] = await Promise.all([
         db.getQuestionsForModule(result.module_id),
         db.getModules(),
       ]);
       setRpQuestions(questions);
       setRpCompetencies(competencies);
+      setRpPart2CompIds(part2CompetencyIds || []);
       setRpModules(mods || []);
       const ex = result.scores || {};
       setRpScores({ part1: ex.part1 || {}, part2: ex.part2 || {}, recommendation: ex.recommendation || "", assessorNotes: ex.assessorNotes || {}, overallNarrative: ex.overallNarrative || "" });
@@ -2964,13 +2966,10 @@ ${compsHtml}
               }, {}));
           const compList = baseComps.map(c => ({ ...c, questions: qsByComp[c.id] || [] }));
 
-          // notesCompList = Part 1 comps + any Part 2 comps not already in compList
-          const _selModForNotes = rpModules.find(m => m.id === selResult?.module_id);
-          const _p2IdsForNotes  = _selModForNotes?.part2_competency_ids || [];
-          const _p2OnlyComps    = _p2IdsForNotes.length > 0
-            ? rpCompetencies.filter(c => _p2IdsForNotes.includes(c.id) && !compList.find(x => x.id === c.id))
-            : [];
-          const notesCompList = [...compList, ..._p2OnlyComps];
+          // Part 2-only competencies (in part2_competency_ids but not linked to Part 1 questions)
+          const notesCompList = rpPart2CompIds.length > 0
+            ? rpCompetencies.filter(c => rpPart2CompIds.includes(c.id))
+            : compList;
 
           function p1Avg(cId) {
             const qs = (compList.find(c => c.id === cId) || {}).questions || [];
@@ -3940,9 +3939,11 @@ ${compsHtml}
                             </div>
                             {comp.questions.map((q, qi) => {
                               const rawAns = (selResult.answers?.questions || {})[q.id];
-                              const ans    = typeof rawAns === "string" ? rawAns : (rawAns?.text || rawAns?.transcript || "");
-                              const hasAudio = !!(rawAns?.has_audio);
-                              const extraNotes = typeof rawAns === "object" ? rawAns?.additional_notes : null;
+                              const ans    = typeof rawAns === "object" && rawAns !== null
+                                ? (rawAns.answer || rawAns.text || rawAns.transcript || "")
+                                : (rawAns || "");
+                              const hasAudio   = !!(rawAns?.has_audio);
+                              const extraNotes = typeof rawAns === "object" && rawAns !== null ? rawAns?.additional_notes : null;
                               const qText = useAdv ? (q.text_advanced || q.text_standard) : (q.text_standard || q.text_advanced);
                               return (
                                 <div key={q.id} style={{
@@ -3962,14 +3963,18 @@ ${compsHtml}
                                     <div style={{ fontSize:13, color:"#333", background:"#f8f9fb", border:"1px solid #e8e8e8",
                                       borderRadius:8, padding:"12px 14px", lineHeight:1.75, marginBottom:10, whiteSpace:"pre-wrap" }}>
                                       {ans}
-                                      {extraNotes && (
-                                        <div style={{ marginTop:8, paddingTop:8, borderTop:"1px solid #eee", fontSize:12, color:"#666" }}>
-                                          <strong>Additional notes:</strong> {extraNotes}
-                                        </div>
-                                      )}
                                     </div>
                                   ) : (
                                     <div style={{ fontSize:12, color:"#bbb", fontStyle:"italic", marginBottom:10 }}>No answer recorded</div>
+                                  )}
+                                  {extraNotes && (
+                                    <div style={{ fontSize:12, color:"#555", background:"#fffbeb", border:"1px solid #fde68a",
+                                      borderRadius:8, padding:"10px 14px", lineHeight:1.7, marginBottom:10, whiteSpace:"pre-wrap" }}>
+                                      <span style={{ fontSize:10, fontWeight:700, color:"#92400e", textTransform:"uppercase", letterSpacing:"0.05em", display:"block", marginBottom:4 }}>
+                                        Voice Transcript (original)
+                                      </span>
+                                      {extraNotes}
+                                    </div>
                                   )}
                                   {scoreInput("part1", q.id)}
                                   <div style={{ marginTop:8 }}>
@@ -4015,40 +4020,26 @@ ${compsHtml}
                             </div>
                           )}
                           <div style={{ borderTop:"1px solid #f0f0f0", paddingTop:"1rem" }}>
-                            {(() => {
-                              const selMod2 = rpModules.find(m => m.id === selResult?.module_id);
-                              const p2Ids2  = selMod2?.part2_competency_ids || [];
-                              const p2CompList = p2Ids2.length > 0 ? compList.filter(c => p2Ids2.includes(c.id)) : compList;
-                              return (
-                                <>
-                                  <div style={{ ...S.label, marginBottom:"0.75rem" }}>
-                                    Part 2: Case Study Exercise - Score by Competency
-                                    {p2Ids2.length > 0 && (
-                                      <span style={{ fontSize:11, fontWeight:400, color:"#888", marginLeft:6 }}>Showing competencies mapped to the Case Study exercise.</span>
-                                    )}
-                                  </div>
-                                  {p2CompList.map((comp, ci) => (
-                                    <div key={comp.id} style={{
-                                      marginBottom: ci < p2CompList.length-1 ? "1.25rem" : 0,
-                                      paddingBottom: ci < p2CompList.length-1 ? "1.25rem" : 0,
-                                      borderBottom: ci < p2CompList.length-1 ? "1px dashed #f0f0f0" : "none",
-                                    }}>
-                                      <div style={{ fontSize:12, fontWeight:600, color:"#555", marginBottom:8 }}>{comp.name}</div>
-                                      {scoreInput("part2", comp.id)}
-                                      <div style={{ marginTop:8 }}>
-                                        <input style={{ ...S.input, fontSize:12 }}
-                                          placeholder="Assessor notes (optional)"
-                                          value={(rpScores.part2[comp.id]||{}).notes || ""}
-                                          onChange={e => setRpScores(prev => ({
-                                            ...prev, part2: { ...prev.part2, [comp.id]: { ...(prev.part2[comp.id]||{}), notes:e.target.value } }
-                                          }))}
-                                        />
-                                      </div>
-                                    </div>
-                                  ))}
-                                </>
-                              );
-                            })()}
+                            <div style={{ ...S.label, marginBottom:"0.75rem" }}>Score by Competency</div>
+                            {notesCompList.map((comp, ci) => (
+                              <div key={comp.id} style={{
+                                marginBottom: ci < notesCompList.length-1 ? "1.25rem" : 0,
+                                paddingBottom: ci < notesCompList.length-1 ? "1.25rem" : 0,
+                                borderBottom: ci < notesCompList.length-1 ? "1px dashed #f0f0f0" : "none",
+                              }}>
+                                <div style={{ fontSize:12, fontWeight:600, color:"#555", marginBottom:8 }}>{comp.name}</div>
+                                {scoreInput("part2", comp.id)}
+                                <div style={{ marginTop:8 }}>
+                                  <input style={{ ...S.input, fontSize:12 }}
+                                    placeholder="Assessor notes (optional)"
+                                    value={(rpScores.part2[comp.id]||{}).notes || ""}
+                                    onChange={e => setRpScores(prev => ({
+                                      ...prev, part2: { ...prev.part2, [comp.id]: { ...(prev.part2[comp.id]||{}), notes:e.target.value } }
+                                    }))}
+                                  />
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </>)}
                       </div>
