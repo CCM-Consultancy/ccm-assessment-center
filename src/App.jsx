@@ -122,6 +122,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const [agCsId,            setAgCsId]            = useState("");
   const [agData,            setAgData]            = useState(null);
   const [agLoading,         setAgLoading]         = useState(false);
+  const [agGuideGenLoading, setAgGuideGenLoading] = useState({});
 
   // ─── Dashboard ────────────────────────────────────────────────────────────────
   const [dbCohortId, setDbCohortId] = useState("");
@@ -955,6 +956,30 @@ async function deleteLibComp(id) {
       setAgData({ ...fullData, assignedComps: allAssigned, guides });
     } catch(e) { notify(`Failed to load assessor guide: ${e.message}`); }
     setAgLoading(false);
+  }
+
+  // ─── Generate guide for a Part 2-only comp from the Assessor Guide tab ────────
+  async function generateAgCompGuide(compId, compName) {
+    if (!agCsId || !agData) return;
+    const csName = agData.caseStudy?.name || "the case study";
+    // Part 2-only comps have no Part 1 questions -- pass empty array so the AI
+    // generates score descriptors and indicators based on the competency name alone
+    setAgGuideGenLoading(prev => ({ ...prev, [compId]: true }));
+    try {
+      const result = await db.generateAssessorGuide(csName, compName, []);
+      await db.saveCompetencyGuide({
+        case_study_id:     agCsId,
+        competency_id:     compId,
+        definition:        result.definition,
+        score_descriptors: result.score_descriptors,
+        strong_indicators: result.strong_indicators,
+        weak_indicators:   result.weak_indicators,
+      });
+      const newGuide = await db.getCompetencyGuide(agCsId, compId);
+      setAgData(prev => prev ? { ...prev, guides: { ...prev.guides, [compId]: newGuide } } : prev);
+      notify("Guide generated and saved.");
+    } catch(e) { notify(`Generate failed: ${e.message}`); }
+    setAgGuideGenLoading(prev => ({ ...prev, [compId]: false }));
   }
 
   // ─── PDF new-window renderer ─────────────────────────────────────────────────
@@ -2839,9 +2864,22 @@ ${compsHtml}
                           )}
                         </div>
 
-                        {!guide && (
+                        {!guide && !assignment.is_part2_only && (
                           <div style={{ padding:"1rem", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:8, fontSize:13, color:"#92400e", marginBottom: compQs.length ? 16 : 0 }}>
                             No assessor guide for this competency yet. Go to the Questions &amp; Guide tab to generate one.
+                          </div>
+                        )}
+
+                        {!guide && assignment.is_part2_only && (
+                          <div style={{ padding:"1rem", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:8, fontSize:13, color:"#92400e", marginBottom:0, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
+                            <span>No assessor guide for this Part 2 competency yet.</span>
+                            <button
+                              onClick={() => generateAgCompGuide(compId, comp?.name || compId)}
+                              disabled={!!agGuideGenLoading[compId]}
+                              style={S.btn(CCM_RED, "#fff", { fontSize:12, padding:"6px 16px", opacity: agGuideGenLoading[compId] ? 0.6 : 1 })}
+                            >
+                              {agGuideGenLoading[compId] ? "Generating…" : "Generate Guide"}
+                            </button>
                           </div>
                         )}
 
