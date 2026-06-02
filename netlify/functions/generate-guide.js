@@ -37,52 +37,66 @@ exports.handler = async (event) => {
     };
   }
 
-  const questionsText = questions.length
+  const hasQuestions = questions.length > 0;
+
+  const questionsText = hasQuestions
     ? questions
         .map((q, i) =>
           `  Q${i + 1} (Advanced): ${q.advanced || ""}\n  Q${i + 1} (Standard): ${q.standard || ""}`
         )
         .join("\n")
-    : "  No specific questions provided — write guidance applicable to this competency in general.";
+    : "";
 
-  const prompt = `You are an assessment center designer. Return ONLY valid JSON — no markdown, no explanation.
+  const prompt = hasQuestions
+    ? `You are an assessment center designer. Return ONLY valid JSON — no markdown, no explanation.
 
 Case study: "${caseStudyName}"
 Competency: "${competencyName}"
-${questions.length ? `\nQuestions being assessed:\n${questionsText}\n` : ""}
+
+Questions being assessed:
+${questionsText}
+
 Generate a JSON object with this exact structure (keep all text very short):
 
 {
   "definition": "One sentence defining ${competencyName} in the ${caseStudyName} context.",
   "score_descriptors": [
-    { "score": 0, "label": "Not Attempted",  "description": "Max 15 words describing score 0 behavior." },
-    { "score": 1, "label": "Ineffective",    "description": "Max 15 words describing score 1 behavior." },
-    { "score": 2, "label": "Inconsistent",   "description": "Max 15 words describing score 2 behavior." },
-    { "score": 3, "label": "Effective",      "description": "Max 15 words describing score 3 behavior." },
-    { "score": 4, "label": "Strong",         "description": "Max 15 words describing score 4 behavior." },
-    { "score": 5, "label": "Exceptional",    "description": "Max 15 words describing score 5 behavior." }
+    { "score": 1, "label": "Ineffective",  "description": "Max 15 words describing score 1 behavior." },
+    { "score": 2, "label": "Inconsistent", "description": "Max 15 words describing score 2 behavior." },
+    { "score": 3, "label": "Effective",    "description": "Max 15 words describing score 3 behavior." },
+    { "score": 4, "label": "Strong",       "description": "Max 15 words describing score 4 behavior." },
+    { "score": 5, "label": "Exceptional",  "description": "Max 15 words describing score 5 behavior." }
   ],
-  "strong_indicators": [
-    "Positive observable behavior, max 10 words.",
-    "Positive observable behavior, max 10 words.",
-    "Positive observable behavior, max 10 words."
-  ],
-  "weak_indicators": [
-    "Negative observable behavior, max 10 words.",
-    "Negative observable behavior, max 10 words.",
-    "Negative observable behavior, max 10 words."
-  ]
+  "strong_indicators": ["Positive behavior, max 10 words.", "Positive behavior, max 10 words.", "Positive behavior, max 10 words."],
+  "weak_indicators":   ["Negative behavior, max 10 words.", "Negative behavior, max 10 words.", "Negative behavior, max 10 words."]
 }
 
-Rules:
-- definition: exactly 1 sentence
-- score_descriptors: exactly 6 items, each description max 15 words
-- strong_indicators: exactly 3 items, each max 10 words
-- weak_indicators: exactly 3 items, each max 10 words
-- Return ONLY the raw JSON object`;
+Rules: definition = 1 sentence. score_descriptors = exactly 5 items scores 1-5, each max 15 words. strong_indicators and weak_indicators = exactly 3 items each, max 10 words. Return ONLY the raw JSON object.`
+
+    : `You are an assessment center designer. Return ONLY valid JSON — no markdown, no explanation.
+
+Case study: "${caseStudyName}"
+Competency: "${competencyName}" (assessed in Part 2 case study exercise only)
+
+Generate a JSON object with this exact structure (keep all text very short):
+
+{
+  "definition": "One sentence defining ${competencyName} in the ${caseStudyName} context.",
+  "score_descriptors": [
+    { "score": 1, "label": "Ineffective",  "description": "Max 15 words describing score 1 behavior." },
+    { "score": 2, "label": "Inconsistent", "description": "Max 15 words describing score 2 behavior." },
+    { "score": 3, "label": "Effective",    "description": "Max 15 words describing score 3 behavior." },
+    { "score": 4, "label": "Strong",       "description": "Max 15 words describing score 4 behavior." },
+    { "score": 5, "label": "Exceptional",  "description": "Max 15 words describing score 5 behavior." }
+  ],
+  "strong_indicators": ["Positive behavior, max 10 words.", "Positive behavior, max 10 words.", "Positive behavior, max 10 words."],
+  "weak_indicators":   ["Negative behavior, max 10 words.", "Negative behavior, max 10 words.", "Negative behavior, max 10 words."]
+}
+
+Rules: definition = 1 sentence. score_descriptors = exactly 5 items scores 1-5, each max 15 words. strong_indicators and weak_indicators = exactly 3 items each, max 10 words. Return ONLY the raw JSON object.`;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const timeout = setTimeout(() => controller.abort(), 9000);
 
   let anthropicRes;
   try {
@@ -96,7 +110,7 @@ Rules:
       },
       body: JSON.stringify({
         model:      "claude-sonnet-4-6",
-        max_tokens: 500,
+        max_tokens: 1500,
         messages:   [{ role: "user", content: prompt }],
       }),
     });
