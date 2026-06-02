@@ -116,6 +116,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const [csCompSaved,       setCsCompSaved]       = useState(false);
   // ─── Q&G per-competency guides ────────────────────────────────────────────────
   const [qgAssignedComps,   setQgAssignedComps]   = useState([]);
+  const [qgPart2OnlyComps,  setQgPart2OnlyComps]  = useState([]); // comps in part2_competency_ids but not in cs_competency_assignments
   const [qgCompGuides,      setQgCompGuides]      = useState({});
   const [guideGenLoading,   setGuideGenLoading]   = useState({});
   // ─── Assessor Guide tab ───────────────────────────────────────────────────────
@@ -646,7 +647,7 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   async function loadQgCs(csId) {
   setQgCsId(csId); setQgModuleId(""); setQFormOpen(false); setGuideOpen(null);
   setQForm({ ...emptyQForm }); closeAiPanel();
-  if (!csId) { setQgData(null); setQgAssignedComps([]); setQgCompGuides({}); return; }
+  if (!csId) { setQgData(null); setQgAssignedComps([]); setQgPart2OnlyComps([]); setQgCompGuides({}); return; }
   setQgLoading(true);
   try {
     const [data, assigned] = await Promise.all([
@@ -655,8 +656,25 @@ const [editCompSaving, setEditCompSaving] = useState(false);
     ]);
     setQgData(data);
     setQgAssignedComps(assigned);
+
+    // Fetch Part 2-only comps: in any module's part2_competency_ids but not in cs_competency_assignments
+    const assignedIds = new Set(assigned.map(a => a.competency_id));
+    const allP2Ids = [...new Set(
+      (data.modules || []).flatMap(m =>
+        Array.isArray(m.part2_competency_ids) ? m.part2_competency_ids : []
+      )
+    )].filter(id => !assignedIds.has(id));
+    let part2Only = [];
+    if (allP2Ids.length) {
+      const comps = await db.getCompetenciesByIds(allP2Ids);
+      part2Only = comps.map(c => ({ competency_id: c.id, competency: c }));
+    }
+    setQgPart2OnlyComps(part2Only);
+
+    // Load guides for all assigned comps + Part 2-only comps
+    const allForGuides = [...assigned, ...part2Only];
     const guides = {};
-    await Promise.all(assigned.map(async a => {
+    await Promise.all(allForGuides.map(async a => {
       const guide = await db.getCompetencyGuide(csId, a.competency_id);
       if (guide) guides[a.competency_id] = guide;
     }));
@@ -1728,11 +1746,16 @@ ${compsHtml}
           const qgQuestions    = (qgData?.questions || []).filter(q => q.module_id === qgModuleId);
           const qgGuides       = qgData?.guide || [];
 
-          // Part 2-only competencies: in the module's part2_competency_ids with no questions in this module
+          // Part 2-only competencies: in the selected module's part2_competency_ids
           const qgModule       = qgModules.find(m => m.id === qgModuleId);
           const qgPart2CompIds = Array.isArray(qgModule?.part2_competency_ids) ? qgModule.part2_competency_ids : [];
+          // P1: assigned comps NOT in part2_competency_ids for this module
           const qgP1Comps      = qgAssignedComps.filter(a => !qgPart2CompIds.includes(a.competency_id));
-          const qgP2Comps      = qgAssignedComps.filter(a => qgPart2CompIds.includes(a.competency_id));
+          // P2: assigned comps that are in part2_competency_ids PLUS extra comps fetched from part2_competency_ids
+          const p2AssignedInModule = qgAssignedComps.filter(a => qgPart2CompIds.includes(a.competency_id));
+          const p2OnlyInModule     = qgPart2OnlyComps.filter(a => qgPart2CompIds.includes(a.competency_id));
+          const p2AllIds           = new Set(p2AssignedInModule.map(a => a.competency_id));
+          const qgP2Comps          = [...p2AssignedInModule, ...p2OnlyInModule.filter(a => !p2AllIds.has(a.competency_id))];
 
           // Shared badge style
           const tierBadge = (tier) => ({
