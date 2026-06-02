@@ -122,7 +122,6 @@ const [editCompSaving, setEditCompSaving] = useState(false);
   const [agCsId,            setAgCsId]            = useState("");
   const [agData,            setAgData]            = useState(null);
   const [agLoading,         setAgLoading]         = useState(false);
-  const [agGuideGenLoading, setAgGuideGenLoading] = useState({});
 
   // ─── Dashboard ────────────────────────────────────────────────────────────────
   const [dbCohortId, setDbCohortId] = useState("");
@@ -966,29 +965,6 @@ async function deleteLibComp(id) {
     setAgLoading(false);
   }
 
-  // ─── Generate guide for a Part 2-only comp from the Assessor Guide tab ────────
-  async function generateAgCompGuide(compId, compName) {
-    if (!agCsId || !agData) return;
-    const csName = agData.caseStudy?.name || "the case study";
-    // Part 2-only comps have no Part 1 questions -- pass empty array so the AI
-    // generates score descriptors and indicators based on the competency name alone
-    setAgGuideGenLoading(prev => ({ ...prev, [compId]: true }));
-    try {
-      const result = await db.generateAssessorGuide(csName, compName, []);
-      await db.saveCompetencyGuide({
-        case_study_id:     agCsId,
-        competency_id:     compId,
-        definition:        result.definition,
-        score_descriptors: result.score_descriptors,
-        strong_indicators: result.strong_indicators,
-        weak_indicators:   result.weak_indicators,
-      });
-      const newGuide = await db.getCompetencyGuide(agCsId, compId);
-      setAgData(prev => prev ? { ...prev, guides: { ...prev.guides, [compId]: newGuide } } : prev);
-      notify("Guide generated and saved.");
-    } catch(e) { notify(`Generate failed: ${e.message}`); }
-    setAgGuideGenLoading(prev => ({ ...prev, [compId]: false }));
-  }
 
   // ─── PDF new-window renderer ─────────────────────────────────────────────────
   function openPdfWindow(data) {
@@ -1752,6 +1728,12 @@ ${compsHtml}
           const qgQuestions    = (qgData?.questions || []).filter(q => q.module_id === qgModuleId);
           const qgGuides       = qgData?.guide || [];
 
+          // Part 2-only competencies: in the module's part2_competency_ids with no questions in this module
+          const qgModule       = qgModules.find(m => m.id === qgModuleId);
+          const qgPart2CompIds = Array.isArray(qgModule?.part2_competency_ids) ? qgModule.part2_competency_ids : [];
+          const qgP1Comps      = qgAssignedComps.filter(a => !qgPart2CompIds.includes(a.competency_id));
+          const qgP2Comps      = qgAssignedComps.filter(a => qgPart2CompIds.includes(a.competency_id));
+
           // Shared badge style
           const tierBadge = (tier) => ({
             fontSize:10, padding:"2px 7px", borderRadius:20, fontWeight:600, letterSpacing:"0.04em",
@@ -2018,94 +2000,116 @@ ${compsHtml}
                           { bg:"#f0fdf4", color:"#16a34a", border:"#bbf7d0" },
                           { bg:"#eff6ff", color:"#0369a1", border:"#bfdbfe" },
                         ];
-                        return (
-                          <div style={{ marginTop:"2rem" }}>
-                            <h3 style={{ fontSize:15, margin:"0 0 1rem", color:"#333" }}>Competency Assessor Guides</h3>
-                            <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:"0.5rem" }}>
-                              One guide per competency - click ✨ Generate Guide to have Claude write the full descriptor, score anchors, and behavioral indicators.
-                            </p>
-                            <p style={{ fontSize:12, color:"#b45309", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:6, padding:"6px 10px", marginBottom:"1rem" }}>
-                              ⏳ Generation takes up to 25 seconds. Stay on this page while it runs, and generate one at a time.
-                            </p>
-                            {qgAssignedComps.map(assignment => {
-                              const compId   = assignment.competency_id;
-                              const comp     = assignment.competency;
-                              const guide    = qgCompGuides[compId];
-                              const isGen    = guideGenLoading[compId];
-                              const compQs   = qgQuestions.filter(q => q.competency_id === compId);
-                              return (
-                                <div key={compId} style={{ ...S.card, marginBottom:"1rem", borderLeft:`3px solid #7e22ce` }}>
-                                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: guide ? 16 : 0 }}>
-                                    <div>
-                                      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
-                                        <span style={{ fontWeight:700, fontSize:15 }}>{comp?.name || compId}</span>
-                                        {comp?.category && <span style={{ fontSize:11, color:"#7e22ce", background:"#faf5ff", border:"1px solid #e9d5ff", padding:"2px 8px", borderRadius:20 }}>{comp.category}</span>}
-                                        {guide && <span style={{ fontSize:11, color:"#16a34a" }}>✓ Guide saved</span>}
-                                      </div>
-                                      <span style={{ fontSize:11, color:"#888" }}>{compQs.length} question{compQs.length !== 1 ? "s" : ""} in this module</span>
-                                    </div>
-                                    <button
-                                      onClick={() => generateCompGuide(compId, comp?.name || compId)}
-                                      disabled={isGen}
-                                      style={S.btn("#7e22ce","#fff",{ fontSize:12, opacity:isGen?0.6:1 })}
-                                    >
-                                      {isGen ? "✨ Generating…" : "✨ Generate Guide"}
-                                    </button>
+
+                        const renderGuideCard = (assignment, showQCount = true) => {
+                          const compId   = assignment.competency_id;
+                          const comp     = assignment.competency;
+                          const guide    = qgCompGuides[compId];
+                          const isGen    = guideGenLoading[compId];
+                          const compQs   = qgQuestions.filter(q => q.competency_id === compId);
+                          return (
+                            <div key={compId} style={{ ...S.card, marginBottom:"1rem", borderLeft:`3px solid #7e22ce` }}>
+                              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: guide ? 16 : 0 }}>
+                                <div>
+                                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
+                                    <span style={{ fontWeight:700, fontSize:15 }}>{comp?.name || compId}</span>
+                                    {comp?.category && <span style={{ fontSize:11, color:"#7e22ce", background:"#faf5ff", border:"1px solid #e9d5ff", padding:"2px 8px", borderRadius:20 }}>{comp.category}</span>}
+                                    {guide && <span style={{ fontSize:11, color:"#16a34a" }}>✓ Guide saved</span>}
                                   </div>
+                                  {showQCount && <span style={{ fontSize:11, color:"#888" }}>{compQs.length} question{compQs.length !== 1 ? "s" : ""} in this module</span>}
+                                </div>
+                                <button
+                                  onClick={() => generateCompGuide(compId, comp?.name || compId)}
+                                  disabled={isGen}
+                                  style={S.btn("#7e22ce","#fff",{ fontSize:12, opacity:isGen?0.6:1 })}
+                                >
+                                  {isGen ? "✨ Generating…" : "✨ Generate Guide"}
+                                </button>
+                              </div>
 
-                                  {guide && (
-                                    <div>
-                                      {guide.definition && (
-                                        <div style={{ marginBottom:16, padding:"12px 14px", background:"#f8f7ff", border:"1px solid #e9d5ff", borderRadius:8 }}>
-                                          <div style={{ fontSize:11, fontWeight:700, color:"#6d28d9", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Competency Definition</div>
-                                          <p style={{ fontSize:13, lineHeight:1.6, margin:0 }}>{guide.definition}</p>
-                                        </div>
-                                      )}
+                              {guide && (
+                                <div>
+                                  {guide.definition && (
+                                    <div style={{ marginBottom:16, padding:"12px 14px", background:"#f8f7ff", border:"1px solid #e9d5ff", borderRadius:8 }}>
+                                      <div style={{ fontSize:11, fontWeight:700, color:"#6d28d9", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Competency Definition</div>
+                                      <p style={{ fontSize:13, lineHeight:1.6, margin:0 }}>{guide.definition}</p>
+                                    </div>
+                                  )}
 
-                                      {Array.isArray(guide.score_descriptors) && guide.score_descriptors.length > 0 && (
-                                        <div style={{ marginBottom:16 }}>
-                                          <div style={{ fontSize:12, fontWeight:700, color:"#333", marginBottom:8 }}>Score Descriptors (0–5)</div>
-                                          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                                            {guide.score_descriptors.map((sd, i) => {
-                                              const col = scoreColors[sd.score] || scoreColors[0];
-                                              return (
-                                                <div key={i} style={{ display:"flex", gap:10, padding:"10px 12px", background:col.bg, border:`1px solid ${col.border}`, borderRadius:8 }}>
-                                                  <div style={{ flexShrink:0, width:54, textAlign:"center" }}>
-                                                    <div style={{ fontSize:18, fontWeight:900, color:col.color }}>{sd.score}</div>
-                                                    <div style={{ fontSize:10, fontWeight:600, color:col.color, lineHeight:1.2 }}>{sd.label}</div>
-                                                  </div>
-                                                  <div style={{ flex:1, fontSize:12, lineHeight:1.55, color:"#333" }}>{sd.description}</div>
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-                                        {[
-                                          { label:"Strong Indicators", key:"strong_indicators", color:"#16a34a", bg:"#f0fdf4", border:"#bbf7d0" },
-                                          { label:"Weak Indicators",   key:"weak_indicators",   color:"#dc2626", bg:"#fef2f2", border:"#fca5a5" },
-                                        ].map(({ label, key, color, bg, border }) => {
-                                          const items = Array.isArray(guide[key]) ? guide[key] : (typeof guide[key]==="string" ? guide[key].split("\n").filter(Boolean) : []);
-                                          if (!items.length) return null;
+                                  {Array.isArray(guide.score_descriptors) && guide.score_descriptors.length > 0 && (
+                                    <div style={{ marginBottom:16 }}>
+                                      <div style={{ fontSize:12, fontWeight:700, color:"#333", marginBottom:8 }}>Score Descriptors (0–5)</div>
+                                      <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                                        {guide.score_descriptors.map((sd, i) => {
+                                          const col = scoreColors[sd.score] || scoreColors[0];
                                           return (
-                                            <div key={key}>
-                                              <div style={{ fontSize:12, fontWeight:700, color, marginBottom:6 }}>{label}</div>
-                                              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                                                {items.map((item, i) => (
-                                                  <div key={i} style={{ fontSize:12, padding:"5px 10px", background:bg, border:`1px solid ${border}`, borderRadius:6 }}>● {item}</div>
-                                                ))}
+                                            <div key={i} style={{ display:"flex", gap:10, padding:"10px 12px", background:col.bg, border:`1px solid ${col.border}`, borderRadius:8 }}>
+                                              <div style={{ flexShrink:0, width:54, textAlign:"center" }}>
+                                                <div style={{ fontSize:18, fontWeight:900, color:col.color }}>{sd.score}</div>
+                                                <div style={{ fontSize:10, fontWeight:600, color:col.color, lineHeight:1.2 }}>{sd.label}</div>
                                               </div>
+                                              <div style={{ flex:1, fontSize:12, lineHeight:1.55, color:"#333" }}>{sd.description}</div>
                                             </div>
                                           );
                                         })}
                                       </div>
                                     </div>
                                   )}
+
+                                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                                    {[
+                                      { label:"Strong Indicators", key:"strong_indicators", color:"#16a34a", bg:"#f0fdf4", border:"#bbf7d0" },
+                                      { label:"Weak Indicators",   key:"weak_indicators",   color:"#dc2626", bg:"#fef2f2", border:"#fca5a5" },
+                                    ].map(({ label, key, color, bg, border }) => {
+                                      const items = Array.isArray(guide[key]) ? guide[key] : (typeof guide[key]==="string" ? guide[key].split("\n").filter(Boolean) : []);
+                                      if (!items.length) return null;
+                                      return (
+                                        <div key={key}>
+                                          <div style={{ fontSize:12, fontWeight:700, color, marginBottom:6 }}>{label}</div>
+                                          <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                                            {items.map((item, i) => (
+                                              <div key={i} style={{ fontSize:12, padding:"5px 10px", background:bg, border:`1px solid ${border}`, borderRadius:6 }}>● {item}</div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
-                              );
-                            })}
+                              )}
+                            </div>
+                          );
+                        };
+
+                        return (
+                          <div style={{ marginTop:"2rem" }}>
+                            {/* ── Part 1 competency guides ── */}
+                            {qgP1Comps.length > 0 && (
+                              <>
+                                <h3 style={{ fontSize:15, margin:"0 0 1rem", color:"#333" }}>Competency Assessor Guides</h3>
+                                <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:"0.5rem" }}>
+                                  One guide per competency - click ✨ Generate Guide to have Claude write the full descriptor, score anchors, and behavioral indicators.
+                                </p>
+                                <p style={{ fontSize:12, color:"#b45309", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:6, padding:"6px 10px", marginBottom:"1rem" }}>
+                                  ⏳ Generation takes up to 25 seconds. Stay on this page while it runs, and generate one at a time.
+                                </p>
+                                {qgP1Comps.map(a => renderGuideCard(a, true))}
+                              </>
+                            )}
+
+                            {/* ── Part 2 competency guides ── */}
+                            {qgP2Comps.length > 0 && (
+                              <>
+                                <h3 style={{ fontSize:15, margin:"2rem 0 1rem", color:"#333" }}>Part 2 Competencies</h3>
+                                <p style={{ fontSize:12, color:"#888", marginTop:0, marginBottom:"0.5rem" }}>
+                                  These competencies are assessed in Part 2 only and have no linked questions. Generate a guide so assessors have score anchors and behavioral indicators for the case study exercise.
+                                </p>
+                                <p style={{ fontSize:12, color:"#b45309", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:6, padding:"6px 10px", marginBottom:"1rem" }}>
+                                  ⏳ Generation takes up to 25 seconds. Stay on this page while it runs, and generate one at a time.
+                                </p>
+                                {qgP2Comps.map(a => renderGuideCard(a, false))}
+                              </>
+                            )}
                           </div>
                         );
                       })()}
@@ -2872,22 +2876,9 @@ ${compsHtml}
                           )}
                         </div>
 
-                        {!guide && !assignment.is_part2_only && (
+                        {!guide && (
                           <div style={{ padding:"1rem", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:8, fontSize:13, color:"#92400e", marginBottom: compQs.length ? 16 : 0 }}>
                             No assessor guide for this competency yet. Go to the Questions &amp; Guide tab to generate one.
-                          </div>
-                        )}
-
-                        {!guide && assignment.is_part2_only && (
-                          <div style={{ padding:"1rem", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:8, fontSize:13, color:"#92400e", marginBottom:0, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
-                            <span>No assessor guide for this Part 2 competency yet.</span>
-                            <button
-                              onClick={() => generateAgCompGuide(compId, comp?.name || compId)}
-                              disabled={!!agGuideGenLoading[compId]}
-                              style={S.btn(CCM_RED, "#fff", { fontSize:12, padding:"6px 16px", opacity: agGuideGenLoading[compId] ? 0.6 : 1 })}
-                            >
-                              {agGuideGenLoading[compId] ? "Generating…" : "Generate Guide"}
-                            </button>
                           </div>
                         )}
 
