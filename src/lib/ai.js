@@ -85,7 +85,9 @@ Rate each competency 1-5 (0 if blank/not attempted). Return valid JSON only - no
   });
 
   if (!text) throw new Error("No response");
-  const parsed = JSON.parse(text.replace(/```json|```/g, "").replace(/—/g, "-").trim());
+  let parsed;
+  try { parsed = JSON.parse(text.replace(/```json|```/g, "").replace(/—/g, "-").trim()); }
+  catch(e) { throw new Error(`AI ratings generation failed: response was truncated or malformed. Try again. Detail: ${e.message}`); }
   if (!parsed.ratings) throw new Error("Invalid structure");
 
   // Enforce: blank answers must be 0
@@ -169,9 +171,11 @@ ${compScores.map(c => `[${c.name}] Score: ${c.overall ? c.overall.toFixed(1) : "
 Return ONLY valid JSON:
 {"executiveSummary":"3-4 sentences tailored to this participant","competencies":[{"name":"exact competency name","measures":"1 sentence on what this competency measures as a leadership behavior","demonstrated":"2 sentences of specific behavioral evidence using AC language - The candidate demonstrated...","strength":"1 sentence on observed strength","developmentOpportunity":"1 sentence on development area"}]}`;
 
-  const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 1500 });
+  const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 4000 });
   if (!text1) throw new Error("No AI response (call 1)");
-  const part1 = JSON.parse(text1.replace(/```json|```/g, "").trim());
+  let part1;
+  try { part1 = JSON.parse(text1.replace(/```json|```/g, "").trim()); }
+  catch(e) { throw new Error(`Report generation failed: AI response was truncated or malformed (call 1). Try again. Detail: ${e.message}`); }
 
   // Call 2 — sections 5–7 with one consolidated 70-20-10 plan
   const recInstruction = assessorRecommendation
@@ -192,7 +196,9 @@ Return ONLY valid JSON for sections 5-7:
 
   const text2 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt2 }], maxTokens: 1500 });
   if (!text2) throw new Error("No AI response (call 2)");
-  const part2 = JSON.parse(text2.replace(/```json|```/g, "").trim());
+  let part2;
+  try { part2 = JSON.parse(text2.replace(/```json|```/g, "").trim()); }
+  catch(e) { throw new Error(`Report generation failed: AI response was truncated or malformed (call 2). Try again. Detail: ${e.message}`); }
 
   return {
     ...part1,
@@ -224,7 +230,10 @@ Return ONLY valid JSON:
 
   const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 2000 });
   if (!text) throw new Error("No AI response");
-  return { ...JSON.parse(text.replace(/```json|```/g, "").trim()), assessorDeclaration: BOILERPLATE_ASSESSOR_DECLARATION };
+  let parsed;
+  try { parsed = JSON.parse(text.replace(/```json|```/g, "").trim()); }
+  catch(e) { throw new Error(`Client report generation failed: AI response was truncated or malformed. Try again. Detail: ${e.message}`); }
+  return { ...parsed, assessorDeclaration: BOILERPLATE_ASSESSOR_DECLARATION };
 }
 
 export async function generateCohortReport({ cohortName, moduleName, cohortData, compList, assessorName, assessorRecommendation }) {
@@ -298,7 +307,9 @@ Return ONLY valid JSON:
 
     const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 1500 });
     if (!text1) throw new Error("No AI response (call 1)");
-    const part1 = JSON.parse(text1.replace(/```json|```/g, "").trim());
+    let part1;
+    try { part1 = JSON.parse(text1.replace(/```json|```/g, "").trim()); }
+    catch(e) { throw new Error(`Report generation failed: AI response was truncated or malformed (call 1). Try again. Detail: ${e.message}`); }
 
     const prompt2 = `${header}
 
@@ -310,7 +321,9 @@ Return ONLY valid JSON:
 
     const text2 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt2 }], maxTokens: 1000 });
     if (!text2) throw new Error("No AI response (call 2)");
-    const part2 = JSON.parse(text2.replace(/```json|```/g, "").trim());
+    let part2;
+    try { part2 = JSON.parse(text2.replace(/```json|```/g, "").trim()); }
+    catch(e) { throw new Error(`Report generation failed: AI response was truncated or malformed (call 2). Try again. Detail: ${e.message}`); }
 
     return { ...part1, ...part2 };
   }
@@ -325,7 +338,10 @@ Return ONLY valid JSON:
 
     const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 1500 });
     if (!text) throw new Error("No AI response");
-    return JSON.parse(text.replace(/```json|```/g, "").trim());
+    let parsedClient;
+    try { parsedClient = JSON.parse(text.replace(/```json|```/g, "").trim()); }
+    catch(e) { throw new Error(`Client report generation failed: AI response was truncated or malformed. Try again. Detail: ${e.message}`); }
+    return parsedClient;
   }
 
   if (type === "cohort") {
@@ -337,7 +353,10 @@ Return ONLY valid JSON:
 {"executiveSummary":"3-4 sentences on overall performance","competencyInsights":[{"name":"competency name","cohortObs":"2-3 sentences on observed behaviour"}],"overallStrengths":"2-3 sentences on key strengths","developmentThemes":"2-3 sentences on development areas","participantSummaries":[{"name":"${participant?.name || "Participant"}","recommendation":"${recommendation}","summary":"one paragraph using AC language - The candidate demonstrated..."}]}`;
     const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 1800 });
     if (!text) throw new Error("No AI response");
-    return { ...JSON.parse(text.replace(/```json|```/g, "").trim()), assessorDeclaration: BOILERPLATE_ASSESSOR_DECLARATION };
+    let parsedCohort;
+    try { parsedCohort = JSON.parse(text.replace(/```json|```/g, "").trim()); }
+    catch(e) { throw new Error(`Cohort report generation failed: AI response was truncated or malformed. Try again. Detail: ${e.message}`); }
+    return { ...parsedCohort, assessorDeclaration: BOILERPLATE_ASSESSOR_DECLARATION };
   }
 
   throw new Error("generateReportFromNotes: unsupported type " + type);
