@@ -934,19 +934,27 @@ async function deleteLibComp(id) {
         db.getAssignedCompetencies(csId),
       ]);
 
-      // Include Part 2-only competencies from module part2_competency_ids
-      const assignedIds = new Set(assigned.map(a => a.competency_id));
-      const p2IdsFromModules = [...new Set(
+      // Collect ALL part2_competency_ids across modules for this case study
+      const allP2Ids = new Set(
         (fullData.modules || []).flatMap(m =>
           Array.isArray(m.part2_competency_ids) ? m.part2_competency_ids : []
         )
-      )].filter(id => !assignedIds.has(id));
+      );
+
+      // Include Part 2-only competencies not already in cs_competency_assignments
+      const assignedIds = new Set(assigned.map(a => a.competency_id));
+      const missingP2Ids = [...allP2Ids].filter(id => !assignedIds.has(id));
       let extraAssigned = [];
-      if (p2IdsFromModules.length) {
-        const comps = await db.getCompetenciesByIds(p2IdsFromModules);
-        extraAssigned = comps.map(c => ({ competency_id: c.id, competency: c, is_part2_only: true }));
+      if (missingP2Ids.length) {
+        const comps = await db.getCompetenciesByIds(missingP2Ids);
+        extraAssigned = comps.map(c => ({ competency_id: c.id, competency: c }));
       }
-      const allAssigned = [...assigned, ...extraAssigned];
+
+      // Tag every comp whose ID is in part2_competency_ids with is_part2_only: true
+      const allAssigned = [...assigned, ...extraAssigned].map(a => ({
+        ...a,
+        is_part2_only: allP2Ids.has(a.competency_id),
+      }));
 
       const guides = {};
       await Promise.all(allAssigned.map(async a => {
