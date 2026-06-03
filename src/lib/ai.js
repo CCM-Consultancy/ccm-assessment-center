@@ -153,45 +153,30 @@ export async function generateIndividualReport({ participant, level, cohort, mod
   const overallVals = compScores.map(c => c.overall).filter(v => v !== null);
   const overallScore = overallVals.length ? overallVals.reduce((a, b) => a + b, 0) / overallVals.length : null;
 
-  const header = `You are an expert Assessment Center report writer for CCM Consultancy. ${AC_RULES}
+  const recNote = assessorRecommendation
+    ? `Recommendation: "${assessorRecommendation}" (use exactly).`
+    : `Determine recommendation: Recommended | Recommended with Development | Deferred | Not Recommended.`;
 
-PARTICIPANT: ${participant.name} | Role: ${participant.role || "Not specified"} | Level: ${level?.name || "Not specified"} | Cohort: ${cohort?.name || "Not specified"} | Module: ${module?.name || module?.title || "Assessment Module"} | Date: ${completedAt ? new Date(completedAt).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB")} | Overall Score: ${overallScore ? overallScore.toFixed(1) : "N/A"}
+  const prompt = `Assessment Center report writer. ${AC_RULES}
+
+${participant.name} | ${level?.name || ""} | ${module?.name || module?.title || ""} | Overall: ${overallScore ? overallScore.toFixed(1) : "N/A"}
+${recNote}
 
 COMPETENCY DATA:
-${compScores.map(c => `[${c.name}] Score: ${c.overall ? c.overall.toFixed(1) : "N/A"} (${c.label})\n${c.qText}${c.p2Text ? `\nPart 2: ${c.p2Text}` : ""}${c.notes ? `\nNotes: ${c.notes}` : ""}`).join("\n\n")}`;
-
-  // Call 1 — executive summary + per-competency sections
-  const prompt1 = `${header}
+${compScores.map(c => `[${c.name}] ${c.overall ? c.overall.toFixed(1) : "N/A"} (${c.label})${c.notes ? ` | Notes: ${c.notes}` : ""}\n${c.qText}${c.p2Text ? `\nPart 2: ${c.p2Text}` : ""}`).join("\n\n")}
 
 Return ONLY valid JSON:
-{"executiveSummary":"3-4 sentences","competencies":[{"name":"comp name","measures":"1 sentence","demonstrated":"2 sentences AC language","strength":"1 sentence","developmentOpportunity":"1 sentence"}]}`;
+{"executiveSummary":"3-4 sentences","competencies":[{"name":"name","demonstrated":"2-3 sentences behavioral evidence","strength":"1 sentence","developmentOpportunity":"1 sentence"}],"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","recommendation":"category","recommendationNarrative":"2-3 sentences"}`;
 
-  const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 2000 });
-  if (!text1) throw new Error("No AI response (call 1)");
-  let part1;
-  try { part1 = JSON.parse(text1.replace(/```json|```/g, "").trim()); }
-  catch(e) { throw new Error(`Report generation failed: AI response was truncated or malformed (call 1). Try again. Detail: ${e.message}`); }
-
-  // Call 2 — overall narrative + 70-20-10 plan + recommendation
-  const recInstruction = assessorRecommendation
-    ? `Recommendation is locked to: "${assessorRecommendation}". Use it exactly.`
-    : `Determine recommendation from scores: Recommended | Recommended with Development | Deferred | Not Recommended.`;
-  const prompt2 = `${header}
-
-${recInstruction}
-
-Return ONLY valid JSON:
-{"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","devPlan":{"on70":["action 1","action 2"],"social20":["1 coaching action"],"formal10":["Coursera: Course Title","HBR/Book: Title"]},"recommendation":"${assessorRecommendation || "category"}","recommendationNarrative":"2-3 sentences AC language"}`;
-
-  const text2 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt2 }], maxTokens: 800 });
-  if (!text2) throw new Error("No AI response (call 2)");
-  let part2;
-  try { part2 = JSON.parse(text2.replace(/```json|```/g, "").trim()); }
-  catch(e) { throw new Error(`Report generation failed: AI response was truncated or malformed (call 2). Try again. Detail: ${e.message}`); }
+  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 1500 });
+  if (!text) throw new Error("No AI response");
+  let result;
+  try { result = JSON.parse(text.replace(/```json|```/g, "").trim()); }
+  catch(e) { throw new Error(`Report generation failed: AI response was truncated or malformed. Try again. Detail: ${e.message}`); }
 
   return {
-    ...part1,
-    ...part2,
+    ...result,
+    devPlan: { on70: [], social20: [], formal10: [] }, // populated by separate IDP call
     assessmentMethodology: BOILERPLATE_METHODOLOGY,
     howToUse: BOILERPLATE_HOW_TO_USE,
   };
@@ -232,45 +217,23 @@ export async function generateCohortReport({ cohortName, moduleName, cohortData,
     return { name: comp.name, avg: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null, count: vals.length };
   });
 
-  const context = `${AC_RULES}
+  const prompt = `Assessment Center report writer. ${AC_RULES}
 
 Cohort: ${cohortName} | Module: ${moduleName} | Participants: ${cohortData.length}
 
-COHORT AVERAGES:
+GROUP COMPETENCY AVERAGES:
 ${avgByComp.map(c => `${c.name}: ${c.avg ? c.avg.toFixed(1) : "N/A"} (${scoreLabel(c.avg)})`).join("\n")}
 
-INDIVIDUAL SCORES:
-${cohortData.map(p => `${p.name}: Overall ${p.overall ? p.overall.toFixed(1) : "N/A"} | ${p.compScores.map(c => `${c.name}: ${c.overall ? c.overall.toFixed(1) : "N/A"}`).join(", ")}`).join("\n")}`;
-
-  // Call 1 — narrative sections
-  const prompt1 = `You are an expert Assessment Center report writer for CCM Consultancy.
-${context}
-
 Return ONLY valid JSON:
-{"executiveSummary":"3-4 sentences","competencyInsights":[{"name":"comp name","cohortObs":"2 sentences"}],"overallStrengths":"2-3 sentences","developmentThemes":"2-3 sentences","devPriorities":[{"priority":"theme","rationale":"1 sentence","on70":"1 action","social20":"1 action","formal10":"1 resource"},{"priority":"theme","rationale":"1 sentence","on70":"1 action","social20":"1 action","formal10":"1 resource"},{"priority":"theme","rationale":"1 sentence","on70":"1 action","social20":"1 action","formal10":"1 resource"}]}`;
+{"executiveSummary":"3-4 sentences on group performance","competencyInsights":[{"name":"comp name","cohortObs":"2 sentences on group pattern"}],"overallStrengths":"2-3 sentences","developmentThemes":"2-3 sentences","devPriorities":[{"priority":"theme","rationale":"1 sentence","on70":"1 action","social20":"1 action","formal10":"1 resource"},{"priority":"theme 2","rationale":"1 sentence","on70":"1 action","social20":"1 action","formal10":"1 resource"},{"priority":"theme 3","rationale":"1 sentence","on70":"1 action","social20":"1 action","formal10":"1 resource"}]}`;
 
-  const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 1500 });
-  if (!text1) throw new Error("No AI response (call 1)");
-  let part1;
-  try { part1 = JSON.parse(text1.replace(/```json|```/g, "").trim()); }
-  catch(e) { throw new Error(`Cohort report generation failed: AI response was truncated or malformed (call 1). Try again. Detail: ${e.message}`); }
+  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 1200 });
+  if (!text) throw new Error("No AI response");
+  let result;
+  try { result = JSON.parse(text.replace(/```json|```/g, "").trim()); }
+  catch(e) { throw new Error(`Cohort report generation failed: AI response was truncated or malformed. Try again. Detail: ${e.message}`); }
 
-  // Call 2 — individual participant summaries (3 sentences max each to limit output size)
-  const prompt2 = `You are an expert Assessment Center report writer for CCM Consultancy.
-${context}
-
-Write a 3-sentence maximum summary and recommendation for EACH participant.
-
-Return ONLY valid JSON:
-{"participantSummaries":[{"name":"participant name","recommendation":"one category only","summary":"max 3 sentences AC language - The candidate demonstrated..."}]}`;
-
-  const text2 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt2 }], maxTokens: 1000 });
-  if (!text2) throw new Error("No AI response (call 2)");
-  let part2;
-  try { part2 = JSON.parse(text2.replace(/```json|```/g, "").trim()); }
-  catch(e) { throw new Error(`Cohort report generation failed: AI response was truncated or malformed (call 2). Try again. Detail: ${e.message}`); }
-
-  return { ...part1, participantSummaries: part2.participantSummaries || [], assessorDeclaration: BOILERPLATE_ASSESSOR_DECLARATION };
+  return { ...result, participantSummaries: [], assessorDeclaration: BOILERPLATE_ASSESSOR_DECLARATION };
 }
 
 export async function generateReportFromNotes({ participant, level, cohort, module, compList, scores, assessorNotes, overallNarrative, recommendation, type }) {
