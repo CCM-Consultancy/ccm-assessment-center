@@ -125,7 +125,7 @@ function buildCompScores(compList, questions, scores, answers, part2Answers, lev
     const qText = qs.map(q => {
       const t   = useAdv ? (q.text_advanced || q.text_standard) : (q.text_standard || q.text_advanced);
       const raw = (answers?.questions || {})[q.id] || answers?.[q.id];
-      const a   = (extractAnsText(raw) || "Not attempted").substring(0, 300);
+      const a   = (extractAnsText(raw) || "Not attempted").substring(0, 200);
       return `Q: ${t}\nA: ${a}`;
     }).join("\n\n");
     const p1Notes = qs.map(q => scores.part1?.[q.id]?.notes).filter(Boolean).join(" ");
@@ -139,12 +139,7 @@ function buildCompScores(compList, questions, scores, answers, part2Answers, lev
   });
 }
 
-const AC_RULES = `AC Language Rules:
-- Never say "passed" or "failed"
-- Always say "The candidate demonstrated..."
-- Recommendation categories ONLY: "Recommended" | "Recommended with Development" | "Deferred" | "Not Recommended"
-- Scores: 1=Ineffective, 2=Inconsistent, 3=Effective, 4=Strong, 5=Exceptional
-- No em dashes. Formal, third-person tone.`;
+const AC_RULES = `Rules: third-person AC language ("The candidate demonstrated..."), no "passed"/"failed", no em dashes. Recommendations: Recommended | Recommended with Development | Deferred | Not Recommended. Scores 1-5: Ineffective/Inconsistent/Effective/Strong/Exceptional.`;
 
 // Fixed boilerplate — injected into AI responses and pre-filled in manual edit mode
 export const BOILERPLATE_METHODOLOGY = "This assessment was conducted using CCM Consultancy's Assessment Center methodology, combining structured behavioral questions and case study analysis. Competencies were assessed against standardized criteria across two components: Part 1 (Behavioral Questions) and Part 2 (Case Study Tasks), rated on a 1–5 scale where 1=Ineffective and 5=Exceptional.";
@@ -165,36 +160,30 @@ PARTICIPANT: ${participant.name} | Role: ${participant.role || "Not specified"} 
 COMPETENCY DATA:
 ${compScores.map(c => `[${c.name}] Score: ${c.overall ? c.overall.toFixed(1) : "N/A"} (${c.label})\n${c.qText}${c.p2Text ? `\nPart 2: ${c.p2Text}` : ""}${c.notes ? `\nNotes: ${c.notes}` : ""}`).join("\n\n")}`;
 
-  // Call 1 — sections 1 and 4 (assessmentMethodology and howToUse are fixed boilerplate)
+  // Call 1 — executive summary + per-competency sections
   const prompt1 = `${header}
 
 Return ONLY valid JSON:
-{"executiveSummary":"3-4 sentences tailored to this participant","competencies":[{"name":"exact competency name","measures":"1 sentence on what this competency measures as a leadership behavior","demonstrated":"2 sentences of specific behavioral evidence using AC language - The candidate demonstrated...","strength":"1 sentence on observed strength","developmentOpportunity":"1 sentence on development area"}]}`;
+{"executiveSummary":"3-4 sentences","competencies":[{"name":"comp name","measures":"1 sentence","demonstrated":"2 sentences AC language","strength":"1 sentence","developmentOpportunity":"1 sentence"}]}`;
 
-  const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 4000 });
+  const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 2000 });
   if (!text1) throw new Error("No AI response (call 1)");
   let part1;
   try { part1 = JSON.parse(text1.replace(/```json|```/g, "").trim()); }
   catch(e) { throw new Error(`Report generation failed: AI response was truncated or malformed (call 1). Try again. Detail: ${e.message}`); }
 
-  // Call 2 — sections 5–7 with one consolidated 70-20-10 plan
+  // Call 2 — overall narrative + 70-20-10 plan + recommendation
   const recInstruction = assessorRecommendation
-    ? `The assessor has determined the following recommendation: "${assessorRecommendation}". You must use this exact recommendation category in the report. Do not infer or change the recommendation based on scores.`
-    : `Determine the recommendation from scores: Recommended OR Recommended with Development OR Deferred OR Not Recommended.`;
+    ? `Recommendation is locked to: "${assessorRecommendation}". Use it exactly.`
+    : `Determine recommendation from scores: Recommended | Recommended with Development | Deferred | Not Recommended.`;
   const prompt2 = `${header}
 
 ${recInstruction}
 
-INDIVIDUAL DEVELOPMENT PLAN: 70-20-10 FRAMEWORK
-Write ONE consolidated development plan addressing the candidate's top 2 priority development areas across all competencies. Do not write a plan per competency.
-70%: On the Job - Write exactly 2 specific workplace actions. No more. Each action is one sentence maximum.
-20%: Learning from Others - Write exactly 1 specific coaching or peer learning action. One sentence maximum.
-10%: Formal Learning - Write exactly 2 specific resources, one Coursera course with title and one HBR article or book with title. One line each.
+Return ONLY valid JSON:
+{"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","devPlan":{"on70":["action 1","action 2"],"social20":["1 coaching action"],"formal10":["Coursera: Course Title","HBR/Book: Title"]},"recommendation":"${assessorRecommendation || "category"}","recommendationNarrative":"2-3 sentences AC language"}`;
 
-Return ONLY valid JSON for sections 5-7:
-{"overallStrengths":"2-3 sentences on overall strengths across all competencies","areasForDevelopment":"2-3 sentences on top development priorities","devPlan":{"on70":["action 1","action 2"],"social20":["1 coaching action"],"formal10":["Coursera: Course Title","HBR/Book: Title"]},"recommendation":"${assessorRecommendation || "one category only: Recommended OR Recommended with Development OR Deferred OR Not Recommended"}","recommendationNarrative":"2-3 sentences using AC language - The candidate demonstrated..."}`;
-
-  const text2 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt2 }], maxTokens: 1500 });
+  const text2 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt2 }], maxTokens: 800 });
   if (!text2) throw new Error("No AI response (call 2)");
   let part2;
   try { part2 = JSON.parse(text2.replace(/```json|```/g, "").trim()); }
@@ -243,37 +232,43 @@ export async function generateCohortReport({ cohortName, moduleName, cohortData,
     return { name: comp.name, avg: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null, count: vals.length };
   });
 
-  const context = `You are an expert Assessment Center report writer for CCM Consultancy. ${AC_RULES}
+  const context = `${AC_RULES}
 
-Cohort: ${cohortName} | Module: ${moduleName} | Assessor: ${assessorName || "CCM Consultancy"} | Participants: ${cohortData.length}
+Cohort: ${cohortName} | Module: ${moduleName} | Participants: ${cohortData.length}
 
-COHORT COMPETENCY AVERAGES:
-${avgByComp.map(c => `${c.name}: ${c.avg ? c.avg.toFixed(1) : "N/A"} (${scoreLabel(c.avg)}) across ${c.count} participants`).join("\n")}
+COHORT AVERAGES:
+${avgByComp.map(c => `${c.name}: ${c.avg ? c.avg.toFixed(1) : "N/A"} (${scoreLabel(c.avg)})`).join("\n")}
 
 INDIVIDUAL SCORES:
-${cohortData.map(p => `${p.name} (${p.level || "Unknown level"}): Overall ${p.overall ? p.overall.toFixed(1) : "N/A"} | ${p.compScores.map(c => `${c.name}: ${c.overall ? c.overall.toFixed(1) : "N/A"}`).join(", ")}`).join("\n")}`;
+${cohortData.map(p => `${p.name}: Overall ${p.overall ? p.overall.toFixed(1) : "N/A"} | ${p.compScores.map(c => `${c.name}: ${c.overall ? c.overall.toFixed(1) : "N/A"}`).join(", ")}`).join("\n")}`;
 
-  // Call 1 — narrative sections (no participant summaries to stay within timeout)
-  const prompt1 = `${context}
-
-Return ONLY valid JSON for the narrative sections:
-{"executiveSummary":"3-4 sentences on overall cohort performance","competencyInsights":[{"name":"exact name","cohortObs":"2-3 sentences on cohort pattern for this competency"}],"overallStrengths":"2-3 sentences on cohort-wide strengths","developmentThemes":"2-3 sentences on cohort-wide development themes","devPriorities":[{"priority":"Theme name describing the development priority across the cohort","rationale":"1 sentence on why this is a priority for this cohort","on70":"one cohort-wide on-the-job action","social20":"one cohort-wide social or mentoring action","formal10":"one resource recommendation with title"},{"priority":"Second theme name","rationale":"1 sentence","on70":"one action","social20":"one action","formal10":"one resource with title"},{"priority":"Third theme name","rationale":"1 sentence","on70":"one action","social20":"one action","formal10":"one resource with title"}]}`;
-
-  const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 2000 });
-  if (!text1) throw new Error("No AI response (call 1)");
-  const part1 = JSON.parse(text1.replace(/```json|```/g, "").trim());
-
-  // Call 2 — individual participant summaries
-  const prompt2 = `${context}
-
-Write a one-paragraph summary and recommendation for EACH participant listed above.
+  // Call 1 — narrative sections
+  const prompt1 = `You are an expert Assessment Center report writer for CCM Consultancy.
+${context}
 
 Return ONLY valid JSON:
-{"participantSummaries":[{"name":"exact participant name","recommendation":"one category only","summary":"one paragraph using AC language - The candidate demonstrated..."}]}`;
+{"executiveSummary":"3-4 sentences","competencyInsights":[{"name":"comp name","cohortObs":"2 sentences"}],"overallStrengths":"2-3 sentences","developmentThemes":"2-3 sentences","devPriorities":[{"priority":"theme","rationale":"1 sentence","on70":"1 action","social20":"1 action","formal10":"1 resource"},{"priority":"theme","rationale":"1 sentence","on70":"1 action","social20":"1 action","formal10":"1 resource"},{"priority":"theme","rationale":"1 sentence","on70":"1 action","social20":"1 action","formal10":"1 resource"}]}`;
 
-  const text2 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt2 }], maxTokens: 1500 });
+  const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 1500 });
+  if (!text1) throw new Error("No AI response (call 1)");
+  let part1;
+  try { part1 = JSON.parse(text1.replace(/```json|```/g, "").trim()); }
+  catch(e) { throw new Error(`Cohort report generation failed: AI response was truncated or malformed (call 1). Try again. Detail: ${e.message}`); }
+
+  // Call 2 — individual participant summaries (3 sentences max each to limit output size)
+  const prompt2 = `You are an expert Assessment Center report writer for CCM Consultancy.
+${context}
+
+Write a 3-sentence maximum summary and recommendation for EACH participant.
+
+Return ONLY valid JSON:
+{"participantSummaries":[{"name":"participant name","recommendation":"one category only","summary":"max 3 sentences AC language - The candidate demonstrated..."}]}`;
+
+  const text2 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt2 }], maxTokens: 1000 });
   if (!text2) throw new Error("No AI response (call 2)");
-  const part2 = JSON.parse(text2.replace(/```json|```/g, "").trim());
+  let part2;
+  try { part2 = JSON.parse(text2.replace(/```json|```/g, "").trim()); }
+  catch(e) { throw new Error(`Cohort report generation failed: AI response was truncated or malformed (call 2). Try again. Detail: ${e.message}`); }
 
   return { ...part1, participantSummaries: part2.participantSummaries || [], assessorDeclaration: BOILERPLATE_ASSESSOR_DECLARATION };
 }
