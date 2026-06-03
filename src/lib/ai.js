@@ -261,7 +261,7 @@ ${overallNarrative || "No overall narrative provided."}`;
 Using only the assessor's observations above (not your own inference), write the individual report sections.
 
 Return ONLY valid JSON:
-{"executiveSummary":"3-4 sentences based on the assessor observations","assessmentMethodology":"${BOILERPLATE_METHODOLOGY}","howToUse":"${BOILERPLATE_HOW_TO_USE}","competencies":[{"name":"exact competency name","measures":"1 sentence on what this competency measures","demonstrated":"2 sentences of specific evidence from assessor observations - The candidate demonstrated...","strength":"1 sentence strength from observations","developmentOpportunity":"1 sentence development area from observations"}]}`;
+{"executiveSummary":"3-4 sentences based on the assessor observations","assessmentMethodology":"METHODOLOGY_PLACEHOLDER","howToUse":"HOW_TO_USE_PLACEHOLDER","competencies":[{"name":"exact competency name","measures":"1 sentence on what this competency measures","demonstrated":"2 sentences of specific evidence from assessor observations - The candidate demonstrated...","strength":"1 sentence strength from observations","developmentOpportunity":"1 sentence development area from observations"}]}`;
 
     const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 1500 });
     if (!text1) throw new Error("No AI response (call 1)");
@@ -283,7 +283,12 @@ Return ONLY valid JSON:
     try { part2 = JSON.parse(text2.replace(/```json|```/g, "").trim()); }
     catch(e) { throw new Error(`Report generation failed: AI response was truncated or malformed (call 2). Try again. Detail: ${e.message}`); }
 
-    return { ...part1, ...part2 };
+    return {
+      ...part1,
+      ...part2,
+      assessmentMethodology: BOILERPLATE_METHODOLOGY,
+      howToUse: BOILERPLATE_HOW_TO_USE,
+    };
   }
 
   if (type === "client") {
