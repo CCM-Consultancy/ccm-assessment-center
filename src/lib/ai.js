@@ -168,7 +168,7 @@ ${compScores.map(c => `[${c.name}] ${c.overall ? c.overall.toFixed(1) : "N/A"} (
 Return ONLY valid JSON:
 {"executiveSummary":"3-4 sentences","competencies":[{"name":"name","demonstrated":"2-3 sentences behavioral evidence","strength":"1 sentence","developmentOpportunity":"1 sentence"}],"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","recommendation":"category","recommendationNarrative":"2-3 sentences"}`;
 
-  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 1500 });
+  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 1200 });
   if (!text) throw new Error("No AI response");
   let result;
   try { result = JSON.parse(text.replace(/```json|```/g, "").trim()); }
@@ -187,22 +187,22 @@ export async function generateClientReport({ participant, level, cohort, module,
   const overallVals = compScores.map(c => c.overall).filter(v => v !== null);
   const overallScore = overallVals.length ? overallVals.reduce((a, b) => a + b, 0) / overallVals.length : null;
 
-  const prompt = `You are an expert Assessment Center report writer for CCM Consultancy. ${AC_RULES}
+  const recNote = assessorRecommendation
+    ? `Recommendation: "${assessorRecommendation}" (use exactly).`
+    : `Determine recommendation: Recommended | Recommended with Development | Deferred | Not Recommended.`;
 
-Write a CLIENT REPORT (formal, concise, suitable for the client organization).
+  const prompt = `Client Assessment Center report writer. ${AC_RULES}
 
-PARTICIPANT: ${participant.name} | Role: ${participant.role || "Not specified"} | Level: ${level?.name || "Not specified"} | Cohort: ${cohort?.name || "Not specified"} | Module: ${module?.name || module?.title || "Assessment Module"} | Date: ${completedAt ? new Date(completedAt).toLocaleDateString("en-GB") : new Date().toLocaleDateString("en-GB")} | Assessor: ${assessorName || "CCM Consultancy"} | Overall Score: ${overallScore ? overallScore.toFixed(1) : "N/A"}
+${participant.name} | ${level?.name || ""} | ${module?.name || module?.title || ""} | Overall: ${overallScore ? overallScore.toFixed(1) : "N/A"}
+${recNote}
 
 COMPETENCY SCORES:
-${compScores.map(c => `[${c.name}] ${c.overall ? c.overall.toFixed(1) : "N/A"} (${c.label}) | Notes: ${c.notes || "None"}`).join("\n")}
-
-
-${assessorRecommendation ? `The assessor has determined the following recommendation: "${assessorRecommendation}". You must use this exact recommendation category. Do not infer or change it.` : "Determine the recommendation from scores."}
+${compScores.map(c => `[${c.name}] ${c.overall ? c.overall.toFixed(1) : "N/A"} (${c.label})${c.notes ? ` | Notes: ${c.notes}` : ""}`).join("\n")}
 
 Return ONLY valid JSON:
-{"executiveSummary":"3-4 sentences","competencies":[{"name":"exact name","evidence":"one concise sentence of evidence","developmentPriority":"one line development priority"}],"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","devSummary":[{"competency":"name","action":"one line recommended action"}],"recommendation":"${assessorRecommendation || "one category only: Recommended OR Recommended with Development OR Deferred OR Not Recommended"}","recommendationNarrative":"2-3 formal sentences"}`;
+{"executiveSummary":"3-4 sentences","competencies":[{"name":"name","evidence":"1 sentence","developmentPriority":"1 sentence"}],"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","devSummary":[{"competency":"name","action":"1 sentence"}],"recommendation":"category","recommendationNarrative":"2-3 sentences"}`;
 
-  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 2000 });
+  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 1000 });
   if (!text) throw new Error("No AI response");
   let parsed;
   try { parsed = JSON.parse(text.replace(/```json|```/g, "").trim()); }
@@ -227,7 +227,7 @@ ${avgByComp.map(c => `${c.name}: ${c.avg ? c.avg.toFixed(1) : "N/A"} (${scoreLab
 Return ONLY valid JSON:
 {"executiveSummary":"3-4 sentences on group performance","competencyInsights":[{"name":"comp name","cohortObs":"2 sentences on group pattern"}],"overallStrengths":"2-3 sentences","developmentThemes":"2-3 sentences","devPriorities":[{"priority":"theme","rationale":"1 sentence","on70":"1 action","social20":"1 action","formal10":"1 resource"},{"priority":"theme 2","rationale":"1 sentence","on70":"1 action","social20":"1 action","formal10":"1 resource"},{"priority":"theme 3","rationale":"1 sentence","on70":"1 action","social20":"1 action","formal10":"1 resource"}]}`;
 
-  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 1200 });
+  const text = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt }], maxTokens: 800 });
   if (!text) throw new Error("No AI response");
   let result;
   try { result = JSON.parse(text.replace(/```json|```/g, "").trim()); }
@@ -267,10 +267,10 @@ ${overallNarrative || "No overall narrative provided."}`;
   if (type === "individual") {
     const prompt1 = `${header}
 
-Using only the assessor's observations above (not your own inference), write the individual report sections.
+Write the report using ONLY the assessor observations provided above. For "demonstrated": quote or closely paraphrase the observations given -- do not substitute generic behavioral language. Only use "insufficient evidence" language if the observations field is empty or says "No notes provided". Do not invent evidence not present in the observations.
 
 Return ONLY valid JSON:
-{"executiveSummary":"3-4 sentences based on the assessor observations","assessmentMethodology":"METHODOLOGY_PLACEHOLDER","howToUse":"HOW_TO_USE_PLACEHOLDER","competencies":[{"name":"exact competency name","measures":"1 sentence on what this competency measures","demonstrated":"2 sentences of specific evidence from assessor observations - The candidate demonstrated...","strength":"1 sentence strength from observations","developmentOpportunity":"1 sentence development area from observations"}]}`;
+{"executiveSummary":"3-4 sentences drawn from the observations","assessmentMethodology":"METHODOLOGY_PLACEHOLDER","howToUse":"HOW_TO_USE_PLACEHOLDER","competencies":[{"name":"exact competency name","measures":"1 sentence on what this competency measures","demonstrated":"2-3 sentences quoting or closely paraphrasing the assessor observations","strength":"1 sentence strength from observations","developmentOpportunity":"1 sentence development area from observations"}]}`;
 
     const text1 = await callClaude({ system: "Return only valid JSON. No markdown. No em dashes.", messages: [{ role: "user", content: prompt1 }], maxTokens: 1500 });
     if (!text1) throw new Error("No AI response (call 1)");
