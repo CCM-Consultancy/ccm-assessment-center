@@ -163,7 +163,7 @@ ${participant.name} | ${level?.name || ""} | ${module?.name || module?.title || 
 ${recNote}
 
 COMPETENCY DATA:
-${compScores.map(c => `[${c.name}] ${c.overall ? c.overall.toFixed(1) : "N/A"} (${c.label})${c.notes ? ` | Notes: ${c.notes}` : ""}\n${c.qText}${c.p2Text ? `\nPart 2: ${c.p2Text}` : ""}`).join("\n\n")}
+${compScores.map(c => `[${c.name}] ${c.overall ? c.overall.toFixed(1) : "N/A"} (${c.label})${c.notes ? ` | Notes: ${c.notes}` : ""}`).join("\n")}
 
 Return ONLY valid JSON:
 {"executiveSummary":"3-4 sentences","competencies":[{"name":"name","demonstrated":"2-3 sentences behavioral evidence","strength":"1 sentence","developmentOpportunity":"1 sentence"}],"overallStrengths":"2-3 sentences","areasForDevelopment":"2-3 sentences","recommendation":"category","recommendationNarrative":"2-3 sentences"}`;
@@ -237,10 +237,19 @@ Return ONLY valid JSON:
 }
 
 export async function generateReportFromNotes({ participant, level, cohort, module, compList, scores, assessorNotes, overallNarrative, recommendation, type }) {
+  // --- DIAGNOSTIC LOGGING (remove after confirming notes are populated) ---
+  console.log("[generateReportFromNotes] type:", type);
+  console.log("[generateReportFromNotes] compList IDs:", compList.map(c => ({ id: c.id, name: c.name })));
+  console.log("[generateReportFromNotes] assessorNotes keys:", Object.keys(assessorNotes || {}));
+  console.log("[generateReportFromNotes] assessorNotes values:", assessorNotes);
+  // -------------------------------------------------------------------------
+
   const compLines = compList.map(c => {
     const note = assessorNotes[c.id] || "No notes provided.";
     return `[${c.name}]\nAssessor observations: ${note}`;
   }).join("\n\n");
+
+  console.log("[generateReportFromNotes] compLines:", compLines);
 
   const header = `You are an expert Assessment Center report writer for CCM Consultancy. ${AC_RULES}
 
